@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 from astropy.time import Time
@@ -13,9 +13,9 @@ from messier_catalog import MESSIER_OBJECTS
 from constellations import get_boundaries, FRENCH_NAMES
 from constellation_lines import get_lines
 
-LON_DEG = 5.86980    # Longitude de l'observateur (degrés, positif vers l'Est)
-LAT_DEG = 44.56410   # Latitude de l'observateur (degrés, positif vers le Nord)
-TIME_UTC = "2025-03-21 20:00:00"  # Heure d'observation en UTC
+LON_DEG  = 5.86980    # Longitude de l'observateur (degrés, positif vers l'Est)
+LAT_DEG  = 44.56410   # Latitude de l'observateur (degrés, positif vers le Nord)
+DATE_STR = "2025-03-21"  # Date d'observation (YYYY-MM-DD)
 
 # Visual style per object type  (colours chosen for white background)
 TYPE_STYLE = {
@@ -397,7 +397,7 @@ def make_sky_map(out="messier_sky_map.png"):
 
 
 def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
-                   utc_time=TIME_UTC,
+                   utc_time=f"{DATE_STR} 20:00:00",
                    elevation_m=0.0,
                    out="messier_altaz_map.png"):
     """
@@ -432,8 +432,8 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
         ends1, ends2 = [], []
 
     # ── 3. Figure rectangulaire : Az en X, Alt en Y ───────────────────────────
-    fig, ax = plt.subplots(figsize=(22, 8), facecolor="#08081a")
-    ax.set_facecolor("#08081a")
+    fig, ax = plt.subplots(figsize=(22, 8), facecolor="white")
+    ax.set_facecolor("white")
 
     ax.set_xlim(0, 360)
     ax.set_ylim(0, 90)
@@ -441,10 +441,10 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
     # ── Grille ────────────────────────────────────────────────────────────────
     ax.set_xticks(np.arange(0, 361, 45))
     ax.set_yticks(np.arange(0, 91, 15))
-    ax.grid(True, color="#1e2d55", linewidth=0.5, linestyle=":", zorder=0)
+    ax.grid(True, color="#dde2ee", linewidth=0.5, linestyle=":", zorder=0)
     ax.set_xticks(np.arange(0, 361, 15), minor=True)
     ax.set_yticks(np.arange(0, 91, 5), minor=True)
-    ax.grid(True, which="minor", color="#141e3a", linewidth=0.3,
+    ax.grid(True, which="minor", color="#eef0f8", linewidth=0.3,
             linestyle=":", zorder=0)
 
     # Labels azimut avec points cardinaux
@@ -452,13 +452,13 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
                 180: "S", 225: "SO", 270: "O", 315: "NO", 360: "N"}
     ax.set_xticklabels(
         [f"{cardinal[d]}  {d}°" for d in np.arange(0, 361, 45)],
-        fontsize=9, color="#aabbee",
+        fontsize=9, color="#334466",
     )
     ax.set_yticklabels([f"{d}°" for d in np.arange(0, 91, 15)],
-                       fontsize=9, color="#aabbee")
+                       fontsize=9, color="#334466")
 
     # Ligne d'horizon astronomique (alt = 0)
-    ax.axhline(0, color="#3355aa", linewidth=1.0, alpha=0.5, zorder=2,
+    ax.axhline(0, color="#334499", linewidth=1.0, alpha=0.6, zorder=2,
                linestyle="--")
 
     # ── Horizon local (fichier horizon.txt) ───────────────────────────────────
@@ -469,9 +469,9 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
         hz_az_c = np.concatenate([[0.0], hz_az, [360.0]])
         hz_alt_c = np.concatenate([[hz_alt[0]], hz_alt, [hz_alt[-1]]])
         ax.fill_between(hz_az_c, 0, hz_alt_c,
-                        color="#3a1500", alpha=0.55, zorder=2)
+                        color="#c88040", alpha=0.25, zorder=2)
         ax.plot(hz_az_c, hz_alt_c,
-                color="#ff7733", linewidth=1.4, alpha=0.95, zorder=11,
+                color="#cc5500", linewidth=1.4, alpha=0.95, zorder=11,
                 label="Horizon local")
 
     # ── Lignes de constellations (segments entièrement au-dessus horizon) ─────
@@ -482,7 +482,7 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
             ax.plot(
                 [a1["az_deg"], a2["az_deg"]],
                 [a1["alt_deg"], a2["alt_deg"]],
-                color="#2255aa", linewidth=0.9, alpha=0.55,
+                color="#4477aa", linewidth=0.9, alpha=0.65,
                 solid_capstyle="round", zorder=3,
             )
 
@@ -492,14 +492,14 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
         s_alt = np.array([s["alt_deg"] for s in visible_s])
         s_mag = np.array([s["mag"] for s in visible_s])
         ax.scatter(s_az, s_alt,
-                   s=_star_size(s_mag), c="#d0d8ff", alpha=0.80,
+                   s=_star_size(s_mag), c="#222244", alpha=0.75,
                    linewidths=0, zorder=4)
         for star in visible_s:
             if star["name"] and star["mag"] < 1.5:
                 ax.annotate(star["name"],
                             xy=(star["az_deg"], star["alt_deg"]),
                             xytext=(4, 4), textcoords="offset points",
-                            fontsize=5.5, color="#aabbee", alpha=0.9, zorder=5)
+                            fontsize=5.5, color="#334466", alpha=0.9, zorder=5)
 
     # ── Objets Messier ────────────────────────────────────────────────────────
     plotted_types = set()
@@ -513,13 +513,13 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
                    c=style["color"], marker=style["marker"],
                    s=style["size"] * 1.3, zorder=6, alpha=0.95,
                    linewidths=0.4,
-                   edgecolors="#ffffff" if style["marker"] not in (
+                   edgecolors="#333333" if style["marker"] not in (
                        "+", "x") else "none",
                    label=lbl)
 
         ax.annotate(f"M{obj['number']}", xy=(az, alt),
                     xytext=(3, 4), textcoords="offset points",
-                    fontsize=4.5, color="#cccccc", alpha=0.85, zorder=7)
+                    fontsize=4.5, color="#444444", alpha=0.85, zorder=7)
 
         if obj["number"] in LABEL_OBJECTS:
             display = obj["name"] if obj["name"] else f"M{obj['number']}"
@@ -530,12 +530,12 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     # ── Labels des axes ───────────────────────────────────────────────────────
     ax.set_xlabel("Azimut  Az  (0° = Nord · 90° = Est · 180° = Sud · 270° = Ouest)",
-                  fontsize=11, color="#8899cc", labelpad=8)
-    ax.set_ylabel("Altitude  Alt", fontsize=11, color="#8899cc", labelpad=8)
+                  fontsize=11, color="#334466", labelpad=8)
+    ax.set_ylabel("Altitude  Alt", fontsize=11, color="#334466", labelpad=8)
 
     for spine in ax.spines.values():
-        spine.set_edgecolor("#2244aa")
-    ax.tick_params(colors="#8899cc", which="both")
+        spine.set_edgecolor("#6688bb")
+    ax.tick_params(colors="#334466", which="both")
 
     # ── Titre ─────────────────────────────────────────────────────────────────
     loc_str = f"lat {lat_deg:+.2f}°  lon {lon_deg:+.2f}°  alt {elevation_m:.0f} m"
@@ -544,7 +544,7 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
         f"Catalogue de Messier — Coordonnées Alt/Az\n"
         f"{loc_str}  ·  {time_str} UTC  ·  "
         f"{len(visible_m)} objets Messier visibles sur {len(data['messier'])}",
-        fontsize=13, color="#ccd8ff", fontweight="bold", pad=12,
+        fontsize=13, color="#111133", fontweight="bold", pad=12,
     )
 
     # ── Légende ───────────────────────────────────────────────────────────────
@@ -553,16 +553,16 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
         for v in TYPE_STYLE.values()
     ]
     star_handles = [
-        plt.scatter([], [], s=60, c="#d0d8ff", label="Étoile (V < 1)"),
-        plt.scatter([], [], s=20, c="#d0d8ff", label="Étoile (V 1–3)"),
-        plt.scatter([], [], s=5,  c="#d0d8ff", label="Étoile (V 3–4.5)"),
+        plt.scatter([], [], s=60, c="#222244", label="Étoile (V < 1)"),
+        plt.scatter([], [], s=20, c="#222244", label="Étoile (V 1–3)"),
+        plt.scatter([], [], s=5,  c="#222244", label="Étoile (V 3–4.5)"),
     ]
     ax.legend(
         handles=obj_handles + star_handles,
         loc="lower center", bbox_to_anchor=(0.5, -0.15),
         ncol=6, fontsize=8.5,
-        facecolor="#0d1030", edgecolor="#3355aa",
-        labelcolor="#ccddff", framealpha=0.95,
+        facecolor="white", edgecolor="#6688bb",
+        labelcolor="#222222", framealpha=0.95,
     )
 
     plt.tight_layout(rect=[0, 0.07, 1, 1])
@@ -573,7 +573,7 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
 
 def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
-                         utc_time=TIME_UTC,
+                         utc_time=f"{DATE_STR} 20:00:00",
                          elevation_m=0.0,
                          out="messier_altaz_map_polar.png"):
     """
@@ -612,8 +612,8 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
     # ── 3. Figure polaire ─────────────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(12, 12),
                            subplot_kw={"projection": "polar"},
-                           facecolor="#08081a")
-    ax.set_facecolor("#08081a")
+                           facecolor="white")
+    ax.set_facecolor("white")
 
     # Nord en haut, azimut croissant dans le sens horaire (N→E→S→O)
     ax.set_theta_zero_location("N")
@@ -624,15 +624,15 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     # ── Grille et anneaux d'altitude ──────────────────────────────────────────
     ax.set_rticks([0, 30, 60, 90])
-    ax.yaxis.set_tick_params(labelcolor="#8899cc", labelsize=8)
+    ax.yaxis.set_tick_params(labelcolor="#334466", labelsize=8)
     ax.set_yticklabels(["Zénith 90°", "60°", "30°", "0° Horizon"],
-                       color="#8899cc", fontsize=8)
-    ax.grid(True, color="#1e2d55", linewidth=0.6, linestyle=":", alpha=0.8)
+                       color="#334466", fontsize=8)
+    ax.grid(True, color="#dde2ee", linewidth=0.6, linestyle=":", alpha=0.8)
 
     # Cercle horizon astronomique (alt = 0)
     theta_full = np.linspace(0, 2 * np.pi, 360)
     ax.plot(theta_full, np.full(360, 90),
-            color="#3355aa", linewidth=1.0, alpha=0.5, zorder=2,
+            color="#334499", linewidth=1.0, alpha=0.6, zorder=2,
             linestyle="--")
 
     # ── Horizon local (fichier horizon.txt) ───────────────────────────────────
@@ -647,14 +647,14 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
         r_smooth = 90 - np.interp(np.degrees(theta_smooth), az_ext, alt_ext)
         # Zone bloquée : remplissage entre l'horizon et le bord (r=90)
         ax.fill_between(theta_smooth, r_smooth, 90,
-                        color="#3a1500", alpha=0.55, zorder=2)
+                        color="#c88040", alpha=0.25, zorder=2)
         ax.plot(theta_smooth, r_smooth,
-                color="#ff7733", linewidth=1.4, alpha=0.95, zorder=11)
+                color="#cc5500", linewidth=1.4, alpha=0.95, zorder=11)
 
     # Points cardinaux
     ax.set_xticks(np.radians([0, 45, 90, 135, 180, 225, 270, 315]))
     ax.set_xticklabels(["N", "NE", "E", "SE", "S", "SO", "O", "NO"],
-                       fontsize=11, fontweight="bold", color="#ccd8ff")
+                       fontsize=11, fontweight="bold", color="#111133")
 
     # ── Lignes de constellations (segments entièrement au-dessus horizon) ─────
     for a1, a2 in zip(ends1, ends2):
@@ -662,7 +662,7 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
             ax.plot(
                 [np.radians(a1["az_deg"]), np.radians(a2["az_deg"])],
                 [90 - a1["alt_deg"],       90 - a2["alt_deg"]],
-                color="#2255aa", linewidth=0.9, alpha=0.55,
+                color="#4477aa", linewidth=0.9, alpha=0.65,
                 solid_capstyle="round", zorder=3,
             )
 
@@ -670,12 +670,12 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
     for star in visible_s:
         theta = np.radians(star["az_deg"])
         r = 90 - star["alt_deg"]
-        ax.scatter(theta, r, s=_star_size(star["mag"]), c="#d0d8ff",
-                   alpha=0.85, linewidths=0, zorder=4)
+        ax.scatter(theta, r, s=_star_size(star["mag"]), c="#222244",
+                   alpha=0.80, linewidths=0, zorder=4)
         if star["name"] and star["mag"] < 1.5:
             ax.annotate(star["name"], (theta, r),
                         xytext=(5, 5), textcoords="offset points",
-                        fontsize=6.5, color="#aabbee", alpha=0.9, zorder=5)
+                        fontsize=6.5, color="#334466", alpha=0.9, zorder=5)
 
     # ── Objets Messier ────────────────────────────────────────────────────────
     plotted_types = set()
@@ -690,13 +690,13 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
                    c=style["color"], marker=style["marker"],
                    s=style["size"] * 1.4, zorder=6, alpha=0.95,
                    linewidths=0.5,
-                   edgecolors="#ffffff" if style["marker"] not in (
+                   edgecolors="#333333" if style["marker"] not in (
                        "+", "x") else "none",
                    label=lbl)
 
         ax.annotate(f"M{obj['number']}", (theta, r),
                     xytext=(4, 4), textcoords="offset points",
-                    fontsize=4.5, color="#dddddd", alpha=0.85, zorder=7)
+                    fontsize=4.5, color="#444444", alpha=0.85, zorder=7)
 
         if obj["number"] in LABEL_OBJECTS:
             display = obj["name"] if obj["name"] else f"M{obj['number']}"
@@ -712,7 +712,7 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
         f"Catalogue de Messier — Vue Alt/Az (polaire)\n"
         f"{loc_str}  ·  {time_str} UTC\n"
         f"{len(visible_m)} objets Messier visibles sur {len(data['messier'])}",
-        fontsize=11, color="#ccd8ff", fontweight="bold", pad=20,
+        fontsize=11, color="#111133", fontweight="bold", pad=20,
     )
 
     # ── Légende ───────────────────────────────────────────────────────────────
@@ -721,16 +721,16 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
         for v in TYPE_STYLE.values()
     ]
     star_handles = [
-        plt.scatter([], [], s=60, c="#d0d8ff", label="Étoile (V < 1)"),
-        plt.scatter([], [], s=20, c="#d0d8ff", label="Étoile (V 1–3)"),
-        plt.scatter([], [], s=5,  c="#d0d8ff", label="Étoile (V 3–4.5)"),
+        plt.scatter([], [], s=60, c="#222244", label="Étoile (V < 1)"),
+        plt.scatter([], [], s=20, c="#222244", label="Étoile (V 1–3)"),
+        plt.scatter([], [], s=5,  c="#222244", label="Étoile (V 3–4.5)"),
     ]
     ax.legend(
         handles=obj_handles + star_handles,
         loc="lower center", bbox_to_anchor=(0.5, -0.12),
         ncol=5, fontsize=8,
-        facecolor="#0d1030", edgecolor="#3355aa",
-        labelcolor="#ccddff", framealpha=0.95,
+        facecolor="white", edgecolor="#6688bb",
+        labelcolor="#222222", framealpha=0.95,
     )
 
     plt.tight_layout()
@@ -838,57 +838,81 @@ _SHORT_TYPE = {
 }
 
 
-def make_visibility_table(date_str=TIME_UTC[:10], lon_deg=LON_DEG, lat_deg=LAT_DEG,
+def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
                           elevation_m=0.0, step_min=5, twilight_deg=-12.0,
                           out="messier_visibility.png"):
     """
-    Génère une image-tableau de visibilité des 110 objets Messier pour une nuit donnée.
+    Génère un tableau de visibilité avec une barre temporelle par objet.
 
-    Colonnes : M# · Nom · Type · Lever · Transit · Coucher · Durée · Alt max · Azimut
-    Triés : visibles d'abord (par heure de lever), puis non-visibles (par alt max).
+    Colonnes : M# · Nom · Type · [barre horaire] · Alt max · Azimut
+    La barre horaire montre la fenêtre de visibilité sur fond de nuit astronomique.
     """
+    from astropy.coordinates import get_sun as _get_sun
+
+    # ── 1. Données de visibilité ───────────────────────────────────────────────
     print(f"Calcul des visibilités pour le {date_str}…")
     rows = compute_visibility(date_str, lon_deg, lat_deg, elevation_m,
                               step_min, twilight_deg)
 
-    vis = sorted([r for r in rows if r["visible_tonight"]],
-                 key=lambda r: r["rise"])
-    nv = sorted([r for r in rows if not r["visible_tonight"]],
-                key=lambda r: -r["alt_max"])
+    vis      = sorted([r for r in rows if r["visible_tonight"]],
+                      key=lambda r: r["rise"])
+    nv       = sorted([r for r in rows if not r["visible_tonight"]],
+                      key=lambda r: -r["alt_max"])
     all_rows = vis + nv
-    n_rows = len(all_rows)
+    n_rows   = len(all_rows)
 
-    row_h = 0.20
-    hdr_h = 0.36
-    ttl_h = 0.72
-    fig_h = n_rows * row_h + hdr_h + ttl_h + 0.45
-    fig_w = 20.0
+    # ── 2. Fenêtre nocturne pour l'axe temporel ───────────────────────────────
+    # Échantillonnage du soleil sur les 24h depuis midi UTC
+    t0    = Time(f"{date_str} 12:00:00", scale="utc")
+    n_t   = int(24 * 60 / step_min)
+    times = t0 + np.arange(n_t) * step_min * u.min
+    loc   = EarthLocation(lon=lon_deg * u.deg, lat=lat_deg * u.deg,
+                          height=elevation_m * u.m)
+    fa    = AltAz(obstime=times, location=loc)
+    sun_a = _get_sun(times).transform_to(fa).alt.deg
+    is_night = sun_a < twilight_deg
+    if not np.any(is_night):
+        is_night = sun_a < -6.0
+
+    night_idx = np.where(is_night)[0]
+    if len(night_idx) > 0:
+        t_start_h = max(0.0, night_idx[0]  * step_min / 60 - 0.75)
+        t_end_h   = min(24.0, night_idx[-1] * step_min / 60 + 0.75)
+    else:
+        t_start_h, t_end_h = 6.0, 18.0   # fallback
+
+    # ── helpers ────────────────────────────────────────────────────────────────
+    def off(hhmm):
+        """'HH:MM' → heures depuis 12:00 UTC du jour date_str (0–24)."""
+        h, m = int(hhmm[:2]), int(hhmm[3:5])
+        return ((h * 60 + m) - 12 * 60) % (24 * 60) / 60.0
+
+    BAR_X0, BAR_X1 = 4.5, 17.8
+    bar_w = BAR_X1 - BAR_X0
+
+    def x_of(off_h):
+        return BAR_X0 + (off_h - t_start_h) / (t_end_h - t_start_h) * bar_w
+
+    # ── 3. Figure ──────────────────────────────────────────────────────────────
+    row_h  = 0.20
+    hdr_h  = 0.52    # assez haut pour les labels horaires
+    ttl_h  = 0.72
+    fig_h  = n_rows * row_h + hdr_h + ttl_h + 0.45
+    fig_w  = 20.0
 
     fig = plt.figure(figsize=(fig_w, fig_h), facecolor="#08081a")
-    ax = fig.add_axes([0, 0, 1, 1])
+    ax  = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, fig_w)
     ax.set_ylim(0, fig_h)
     ax.set_facecolor("#08081a")
     ax.axis("off")
 
-    # Colonnes : (label, x_centre, alignement)
-    COL = [
-        ("M#",       0.80, "right"),
-        ("Nom",      2.40, "left"),
-        ("Type",     5.80, "left"),
-        ("Lever",    8.60, "center"),
-        ("Transit", 10.20, "center"),
-        ("Coucher", 11.80, "center"),
-        ("Durée",   13.20, "center"),
-        ("Alt max", 14.80, "center"),
-        ("Azimut",  16.30, "center"),
-    ]
-
-    y_ttl = fig_h - 0.22 - ttl_h / 2
-    y_hdr = fig_h - 0.22 - ttl_h - hdr_h / 2
+    y_ttl   = fig_h - 0.22 - ttl_h / 2
+    y_hdr   = fig_h - 0.22 - ttl_h - hdr_h / 2
     y_data0 = fig_h - 0.22 - ttl_h - hdr_h
+    data_h  = n_rows * row_h
 
-    # Titre
+    # ── Titre ──────────────────────────────────────────────────────────────────
     ax.text(fig_w / 2, y_ttl,
             f"Visibilité des objets Messier — nuit du {date_str}\n"
             f"lat {lat_deg:+.4f}°  lon {lon_deg:+.4f}°  "
@@ -897,15 +921,63 @@ def make_visibility_table(date_str=TIME_UTC[:10], lon_deg=LON_DEG, lat_deg=LAT_D
             ha="center", va="center", color="#ccd8ff",
             fontsize=11, fontweight="bold")
 
-    # En-tête
+    # ── En-tête ────────────────────────────────────────────────────────────────
     ax.add_patch(plt.Rectangle((0.15, y_hdr - hdr_h / 2),
                                fig_w - 0.3, hdr_h, color="#1a2040", zorder=1))
-    for lbl, xc, ha in COL:
+
+    # Labels colonnes texte
+    for lbl, xc, ha in [("M#", 0.65, "right"), ("Nom", 1.00, "left"),
+                         ("Type", 3.10, "left"), ("Alt max", 18.30, "center"),
+                         ("Azimut", 19.30, "center")]:
         ax.text(xc, y_hdr, lbl, ha=ha, va="center",
                 color="#aabbee", fontsize=8, fontweight="bold",
                 fontfamily="monospace")
 
-    # Lignes de données
+    # Label colonne barre
+    ax.text((BAR_X0 + BAR_X1) / 2, y_hdr + 0.10,
+            "Fenêtre de visibilité  (Heure UTC)",
+            ha="center", va="bottom", color="#8899cc",
+            fontsize=7, fontweight="bold", fontfamily="monospace")
+
+    # Ticks horaires (toutes les heures)
+    tick_step = 1
+    first_tick = np.ceil(t_start_h / tick_step) * tick_step
+    tick_offs  = np.arange(first_tick, t_end_h + 0.01, tick_step)
+    for toff in tick_offs:
+        xp = x_of(toff)
+        if BAR_X0 - 0.01 <= xp <= BAR_X1 + 0.01:
+            total_min = int(round(toff * 60)) + 12 * 60
+            h_label   = (total_min // 60) % 24
+            # Gros tick toutes les 2h, petits entre
+            is_major = (h_label % 2 == 0)
+            ax.plot([xp, xp], [y_hdr - 0.06, y_hdr - 0.01],
+                    color="#8899cc" if is_major else "#445577",
+                    linewidth=0.9 if is_major else 0.5, zorder=3)
+            if is_major:
+                ax.text(xp, y_hdr - 0.08, f"{h_label:02d}h",
+                        ha="center", va="top", color="#8899cc",
+                        fontsize=6.5, fontfamily="monospace")
+
+    # ── Bande nuit sur toute la hauteur des données ────────────────────────────
+    if len(night_idx) > 0:
+        nx0 = np.clip(x_of(night_idx[0]  * step_min / 60), BAR_X0, BAR_X1)
+        nx1 = np.clip(x_of(night_idx[-1] * step_min / 60), BAR_X0, BAR_X1)
+        ax.add_patch(plt.Rectangle(
+            (nx0, y_data0 - data_h), nx1 - nx0, data_h,
+            color="#0d1535", alpha=0.55, zorder=1,
+        ))
+
+    # Lignes verticales des ticks sur toutes les lignes de données
+    for toff in tick_offs:
+        xp = x_of(toff)
+        if BAR_X0 - 0.01 <= xp <= BAR_X1 + 0.01:
+            total_min = int(round(toff * 60)) + 12 * 60
+            h_label   = (total_min // 60) % 24
+            ax.plot([xp, xp], [y_data0 - data_h, y_data0],
+                    color="#1e2d55" if h_label % 2 == 0 else "#141e3a",
+                    linewidth=0.4, alpha=0.7, zorder=2)
+
+    # ── Lignes de données ──────────────────────────────────────────────────────
     for i, row in enumerate(all_rows):
         y = y_data0 - i * row_h - row_h / 2
 
@@ -914,49 +986,51 @@ def make_visibility_table(date_str=TIME_UTC[:10], lon_deg=LON_DEG, lat_deg=LAT_D
             sep = y + row_h / 2
             ax.plot([0.15, fig_w - 0.15], [sep, sep],
                     color="#334466", linewidth=0.7, zorder=5)
-            ax.text(fig_w / 2, sep + 0.03,
+            ax.text((BAR_X0 + BAR_X1) / 2, sep + 0.03,
                     "── objets non visibles cette nuit ──",
                     ha="center", va="bottom", color="#445577",
                     fontsize=6.5, fontstyle="italic")
 
-        # Fond de ligne
-        if row["visible_tonight"]:
-            bg = "#0e1535" if i % 2 == 0 else "#121a3a"
-        else:
-            bg = "#090914" if i % 2 == 0 else "#0b0b1a"
+        # Fond de ligne (alternance)
+        bg = ("#0e1535" if i % 2 == 0 else "#121a3a") if row["visible_tonight"] \
+             else ("#090914" if i % 2 == 0 else "#0b0b1a")
         ax.add_patch(plt.Rectangle((0.15, y - row_h / 2),
                                    fig_w - 0.3, row_h, color=bg, zorder=1))
 
-        # Couleur texte
-        tc = (TYPE_STYLE.get(row["type"], TYPE_STYLE["DS"])["color"]
-              if row["visible_tonight"] else "#3d3d55")
+        style = TYPE_STYLE.get(row["type"], TYPE_STYLE["DS"])
+        tc    = style["color"] if row["visible_tonight"] else "#3d3d55"
 
-        # Formatage durée
-        dur = row["duration_min"]
-        if dur >= 60:
-            dur_s = f"{dur // 60}h{dur % 60:02d}"
-        elif dur > 0:
-            dur_s = f"{dur}min"
-        else:
-            dur_s = "—"
-
-        vals = [
-            f"M{row['number']:>3}",
-            (row["name"] or "—")[:18],
-            _SHORT_TYPE.get(row["type"], row["type"]),
-            row["rise"] or "—",
-            row["transit"] or "—",
-            row["set"] or "—",
-            dur_s,
-            f"{row['alt_max']:+.1f}°",
-            f"{row['az_transit']:.1f}°" if row["az_transit"] is not None else "—",
-        ]
-
-        for (lbl, xc, ha), val in zip(COL, vals):
+        # Colonnes texte
+        for xc, ha, val in [
+            (0.65,  "right",  f"M{row['number']:>3}"),
+            (1.00,  "left",   (row["name"] or "—")[:18]),
+            (3.10,  "left",   _SHORT_TYPE.get(row["type"], row["type"])),
+            (18.30, "center", f"{row['alt_max']:+.1f}°"),
+            (19.30, "center", f"{row['az_transit']:.1f}°"
+             if row["az_transit"] is not None else "—"),
+        ]:
             ax.text(xc, y, val, ha=ha, va="center",
                     color=tc, fontsize=7, fontfamily="monospace")
 
-    # Légende types en bas
+        # ── Barre de visibilité ────────────────────────────────────────────────
+        if row["visible_tonight"] and row["rise"] and row["set"]:
+            rise_x = np.clip(x_of(off(row["rise"])), BAR_X0, BAR_X1)
+            set_x  = np.clip(x_of(off(row["set"])),  BAR_X0, BAR_X1)
+            bh     = row_h * 0.54
+            by     = y - bh / 2
+            # Barre principale (avec largeur minimale visible)
+            bw = max(set_x - rise_x, 0.04)
+            ax.add_patch(plt.Rectangle(
+                (rise_x, by), bw, bh,
+                color=style["color"], alpha=0.72, zorder=3,
+            ))
+            # Marqueur de transit (trait blanc vertical)
+            if row["transit"]:
+                tr_x = np.clip(x_of(off(row["transit"])), BAR_X0, BAR_X1)
+                ax.plot([tr_x, tr_x], [by, by + bh],
+                        color="#ffffff", linewidth=1.1, alpha=0.88, zorder=4)
+
+    # ── Légende types en bas ───────────────────────────────────────────────────
     lx = 0.5
     for otype, style in TYPE_STYLE.items():
         ax.text(lx, 0.15, f"■ {_SHORT_TYPE.get(otype, otype)} ({otype})",
@@ -970,27 +1044,148 @@ def make_visibility_table(date_str=TIME_UTC[:10], lon_deg=LON_DEG, lat_deg=LAT_D
     plt.close(fig)
 
 
+def compute_astro_night(date_str, lon_deg=LON_DEG, lat_deg=LAT_DEG,
+                        elevation_m=0.0):
+    """
+    Calcule les heures de crépuscule et d'aube astronomiques pour une nuit donnée.
+
+    Le crépuscule astronomique correspond au moment où le Soleil passe sous -18°
+    (en soirée) ; l'aube astronomique au moment où il remonte au-dessus de -18°
+    (au matin).
+
+    Paramètres
+    ----------
+    date_str    : str   – date "YYYY-MM-DD" (la nuit commence ce soir-là)
+    lon_deg     : float – longitude de l'observateur (degrés Est)
+    lat_deg     : float – latitude de l'observateur (degrés Nord)
+    elevation_m : float – altitude du site en mètres
+
+    Retourne
+    --------
+    (twilight_utc, dawn_utc) : tuple de astropy.time.Time
+        Les deux instants en UTC.  Si la nuit astronomique n'existe pas (été
+        à haute latitude), retourne (None, None).
+    """
+    from astropy.coordinates import get_sun
+
+    ASTRO_DEG = -18.0           # seuil crépuscule/aube astronomique
+
+    # Échantillonnage minute par minute de midi à midi+1
+    t0    = Time(f"{date_str} 12:00:00", scale="utc")
+    n_t   = 24 * 60             # 1 440 points
+    times = t0 + np.arange(n_t) * 1 * u.min
+
+    loc   = EarthLocation(lon=lon_deg * u.deg, lat=lat_deg * u.deg,
+                          height=elevation_m * u.m)
+    frame = AltAz(obstime=times, location=loc)
+    sun_alt = get_sun(times).transform_to(frame).alt.deg
+
+    twilight_idx = None
+    dawn_idx     = None
+
+    for i in range(1, n_t):
+        # Première descente sous -18° → crépuscule astronomique
+        if twilight_idx is None and sun_alt[i - 1] >= ASTRO_DEG > sun_alt[i]:
+            twilight_idx = i
+        # Première remontée au-dessus de -18° après le crépuscule → aube
+        elif twilight_idx is not None and dawn_idx is None \
+                and sun_alt[i - 1] < ASTRO_DEG <= sun_alt[i]:
+            dawn_idx = i
+            break
+
+    if twilight_idx is None or dawn_idx is None:
+        return None, None
+
+    return times[twilight_idx], times[dawn_idx]
+
+
 def main():
-    import os
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Génère les cartes Messier pour une nuit donnée."
+    )
+    parser.add_argument(
+        "date", nargs="?", default=DATE_STR,
+        help="Date d'observation au format YYYY-MM-DD (défaut : %(default)s)",
+    )
+    args = parser.parse_args()
+    date_str = args.date
+
     result_dir = os.path.join(os.path.dirname(__file__), "..", "result")
     os.makedirs(result_dir, exist_ok=True)
 
+    # ── Carte du ciel équatorial (une seule, intemporelle) ────────────────────
     make_sky_map(out=os.path.join(result_dir, "messier_sky_map.png"))
-    make_altaz_map(
-        lon_deg=LON_DEG, lat_deg=LAT_DEG,
-        utc_time=TIME_UTC,
-        out=os.path.join(result_dir, "messier_altaz_map.png"),
-    )
-    make_altaz_map_polar(
-        lon_deg=LON_DEG, lat_deg=LAT_DEG,
-        utc_time=TIME_UTC,
-        out=os.path.join(result_dir, "messier_altaz_map_polar.png"),
-    )
+
+    # ── Tableau de visibilité pour la nuit (une seule image) ─────────────────
     make_visibility_table(
-        date_str=TIME_UTC[:10],
+        date_str=date_str,
         lon_deg=LON_DEG, lat_deg=LAT_DEG,
         out=os.path.join(result_dir, "messier_visibility.png"),
     )
+
+    # ── Calcul crépuscule / aube astronomiques ────────────────────────────────
+    print(f"\nCalcul de la nuit astronomique pour le {date_str}…")
+    twilight_t, dawn_t = compute_astro_night(date_str, LON_DEG, LAT_DEG)
+
+    if twilight_t is None or dawn_t is None:
+        print("Aucune nuit astronomique complète pour cette date et ce lieu.")
+        print("Génération d'une seule image Alt/Az à minuit UTC comme repli.")
+        fallback = f"{date_str} 00:00:00"
+        make_altaz_map(
+            lon_deg=LON_DEG, lat_deg=LAT_DEG,
+            utc_time=fallback,
+            out=os.path.join(result_dir, f"messier_altaz_map_{date_str}_0000.png"),
+        )
+        make_altaz_map_polar(
+            lon_deg=LON_DEG, lat_deg=LAT_DEG,
+            utc_time=fallback,
+            out=os.path.join(result_dir, f"messier_altaz_map_polar_{date_str}_0000.png"),
+        )
+        return
+
+    twilight_dt = twilight_t.to_datetime(timezone=timezone.utc)
+    dawn_dt     = dawn_t.to_datetime(timezone=timezone.utc)
+
+    print(f"  Crépuscule astronomique : {twilight_dt.strftime('%Y-%m-%d %H:%M')} UTC")
+    print(f"  Aube astronomique       : {dawn_dt.strftime('%Y-%m-%d %H:%M')} UTC")
+
+    # ── Construction de la liste des instants à représenter ──────────────────
+    # crépuscule · chaque heure entière comprise dans la nuit · aube
+    obs_times = [twilight_dt]
+
+    first_full_hour = twilight_dt.replace(minute=0, second=0, microsecond=0) \
+                      + timedelta(hours=1)
+    current = first_full_hour
+    while current < dawn_dt:
+        obs_times.append(current)
+        current += timedelta(hours=1)
+
+    obs_times.append(dawn_dt)
+
+    # ── Génération des images Alt/Az pour chaque instant ─────────────────────
+    print(f"\nGénération de {len(obs_times)} image(s) Alt/Az…")
+    for t in obs_times:
+        utc_str  = t.strftime("%Y-%m-%d %H:%M:%S")
+        hour_tag = t.strftime("%H%M")
+
+        make_altaz_map(
+            lon_deg=LON_DEG, lat_deg=LAT_DEG,
+            utc_time=utc_str,
+            out=os.path.join(
+                result_dir,
+                f"messier_altaz_map_{date_str}_{hour_tag}.png",
+            ),
+        )
+        make_altaz_map_polar(
+            lon_deg=LON_DEG, lat_deg=LAT_DEG,
+            utc_time=utc_str,
+            out=os.path.join(
+                result_dir,
+                f"messier_altaz_map_polar_{date_str}_{hour_tag}.png",
+            ),
+        )
 
 
 if __name__ == "__main__":
