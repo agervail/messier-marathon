@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from datetime import datetime, timezone, timedelta
+from adjustText import adjust_text
 
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 from astropy.time import Time
@@ -27,11 +28,6 @@ TYPE_STYLE = {
     "SNR": {"color": "#dd1111", "marker": "P",  "size": 80,  "label": "Reste de supernova"},
     "SC":  {"color": "#555555", "marker": "+",  "size": 80,  "label": "Nuage stellaire"},
     "DS":  {"color": "#777777", "marker": "x",  "size": 60,  "label": "Étoile double"},
-}
-
-# Objects to label explicitly (notable ones)
-LABEL_OBJECTS = {
-    1, 8, 13, 16, 17, 27, 31, 33, 42, 44, 45, 51, 57, 81, 82, 83, 87, 97, 101, 104
 }
 
 
@@ -324,6 +320,9 @@ def make_sky_map(out="messier_sky_map.png"):
 
     # ── Messier objects ───────────────────────────────────────────────────────
     plotted_types = set()
+    eq_texts = []
+    eq_points_x = []
+    eq_points_y = []
     for num, ra, dec, otype, name in zip(numbers, ra_deg, dec_deg, types, names):
         style = TYPE_STYLE.get(otype, TYPE_STYLE["DS"])
         label_arg = style["label"] if otype not in plotted_types else "_nolegend_"
@@ -337,16 +336,16 @@ def make_sky_map(out="messier_sky_map.png"):
                        "+", "x") else "none",
                    label=label_arg)
 
-        ax.annotate(f"M{num}", xy=(ra, dec),
-                    xytext=(3, 4), textcoords="offset points",
-                    fontsize=4.5, color="#444444", alpha=0.8, zorder=6)
+        t = ax.text(ra, dec, f"M{num}",
+                    fontsize=4.5, color="#444444",
+                    alpha=1.0, zorder=6)
+        eq_texts.append(t)
+        eq_points_x.append(ra)
+        eq_points_y.append(dec)
 
-        if num in LABEL_OBJECTS:
-            display = name if name else f"M{num}"
-            ax.annotate(display, xy=(ra, dec),
-                        xytext=(5, -9), textcoords="offset points",
-                        fontsize=6.5, color=style["color"],
-                        fontweight="bold", alpha=1.0, zorder=7)
+    adjust_text(eq_texts, x=eq_points_x, y=eq_points_y, ax=ax,
+                arrowprops=dict(arrowstyle="-", color="#aaaaaa", lw=0.5),
+                expand=(1.2, 1.4), force_text=(0.3, 0.5))
 
     # ── Axis labels & title ───────────────────────────────────────────────────
     ax.set_xlabel("Ascension droite  α", fontsize=11,
@@ -503,6 +502,9 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     # ── Objets Messier ────────────────────────────────────────────────────────
     plotted_types = set()
+    altaz_texts = []
+    altaz_points_x = []
+    altaz_points_y = []
     for obj in visible_m:
         style = TYPE_STYLE.get(obj["type"], TYPE_STYLE["DS"])
         az, alt = obj["az_deg"], obj["alt_deg"]
@@ -517,16 +519,17 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
                        "+", "x") else "none",
                    label=lbl)
 
-        ax.annotate(f"M{obj['number']}", xy=(az, alt),
-                    xytext=(3, 4), textcoords="offset points",
-                    fontsize=4.5, color="#444444", alpha=0.85, zorder=7)
+        num = obj["number"]
+        t = ax.text(az, alt, f"M{num}",
+                    fontsize=4.5, color="#444444",
+                    alpha=1.0, zorder=7)
+        altaz_texts.append(t)
+        altaz_points_x.append(az)
+        altaz_points_y.append(alt)
 
-        if obj["number"] in LABEL_OBJECTS:
-            display = obj["name"] if obj["name"] else f"M{obj['number']}"
-            ax.annotate(display, xy=(az, alt),
-                        xytext=(5, -9), textcoords="offset points",
-                        fontsize=6.5, color=style["color"],
-                        fontweight="bold", alpha=1.0, zorder=8)
+    adjust_text(altaz_texts, x=altaz_points_x, y=altaz_points_y, ax=ax,
+                arrowprops=dict(arrowstyle="-", color="#aaaaaa", lw=0.5),
+                expand=(1.2, 1.4), force_text=(0.3, 0.5))
 
     # ── Labels des axes ───────────────────────────────────────────────────────
     ax.set_xlabel("Azimut  Az  (0° = Nord · 90° = Est · 180° = Sud · 270° = Ouest)",
@@ -679,6 +682,9 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     # ── Objets Messier ────────────────────────────────────────────────────────
     plotted_types = set()
+    polar_texts = []
+    polar_points_x = []
+    polar_points_y = []
     for obj in visible_m:
         style = TYPE_STYLE.get(obj["type"], TYPE_STYLE["DS"])
         theta = np.radians(obj["az_deg"])
@@ -694,16 +700,17 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
                        "+", "x") else "none",
                    label=lbl)
 
-        ax.annotate(f"M{obj['number']}", (theta, r),
-                    xytext=(4, 4), textcoords="offset points",
-                    fontsize=4.5, color="#444444", alpha=0.85, zorder=7)
+        num = obj["number"]
+        t = ax.text(theta, r, f"M{num}",
+                    fontsize=4.5, color="#444444",
+                    alpha=1.0, zorder=7)
+        polar_texts.append(t)
+        polar_points_x.append(theta)
+        polar_points_y.append(r)
 
-        if obj["number"] in LABEL_OBJECTS:
-            display = obj["name"] if obj["name"] else f"M{obj['number']}"
-            ax.annotate(display, (theta, r),
-                        xytext=(5, -10), textcoords="offset points",
-                        fontsize=6.5, color=style["color"],
-                        fontweight="bold", alpha=1.0, zorder=8)
+    adjust_text(polar_texts, x=polar_points_x, y=polar_points_y, ax=ax,
+                arrowprops=dict(arrowstyle="-", color="#aaaaaa", lw=0.5),
+                expand=(1.2, 1.4), force_text=(0.3, 0.5))
 
     # ── Titre ─────────────────────────────────────────────────────────────────
     loc_str = f"lat {lat_deg:+.2f}°  lon {lon_deg:+.2f}°  alt {elevation_m:.0f} m"
@@ -854,12 +861,26 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
     rows = compute_visibility(date_str, lon_deg, lat_deg, elevation_m,
                               step_min, twilight_deg)
 
-    vis      = sorted([r for r in rows if r["visible_tonight"]],
-                      key=lambda r: r["rise"])
-    nv       = sorted([r for r in rows if not r["visible_tonight"]],
-                      key=lambda r: -r["alt_max"])
-    all_rows = vis + nv
-    n_rows   = len(all_rows)
+    # ── helpers ────────────────────────────────────────────────────────────────
+    def off(hhmm):
+        """'HH:MM' → heures depuis 12:00 UTC du jour date_str (0–24)."""
+        h, m = int(hhmm[:2]), int(hhmm[3:5])
+        return ((h * 60 + m) - 12 * 60) % (24 * 60) / 60.0
+
+    # ── Ordre des objets depuis order.txt ─────────────────────────────────────
+    order_path = os.path.join(os.path.dirname(__file__), "order.txt")
+    with open(order_path, encoding="utf-8") as f:
+        ordered_numbers = [int(line.strip()[1:]) for line in f
+                           if line.strip().startswith("M")]
+
+    rows_by_number = {r["number"]: r for r in rows}
+    all_rows = [rows_by_number[n] for n in ordered_numbers if n in rows_by_number]
+    # Ajouter les objets absents du fichier (sécurité)
+    listed = set(ordered_numbers)
+    all_rows += [r for r in rows if r["number"] not in listed]
+
+    vis    = [r for r in rows if r["visible_tonight"]]
+    n_rows = len(all_rows)
 
     # ── 2. Fenêtre nocturne pour l'axe temporel ───────────────────────────────
     # Échantillonnage du soleil sur les 24h depuis midi UTC
@@ -881,12 +902,6 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
     else:
         t_start_h, t_end_h = 6.0, 18.0   # fallback
 
-    # ── helpers ────────────────────────────────────────────────────────────────
-    def off(hhmm):
-        """'HH:MM' → heures depuis 12:00 UTC du jour date_str (0–24)."""
-        h, m = int(hhmm[:2]), int(hhmm[3:5])
-        return ((h * 60 + m) - 12 * 60) % (24 * 60) / 60.0
-
     BAR_X0, BAR_X1 = 4.5, 17.8
     bar_w = BAR_X1 - BAR_X0
 
@@ -900,11 +915,11 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
     fig_h  = n_rows * row_h + hdr_h + ttl_h + 0.45
     fig_w  = 20.0
 
-    fig = plt.figure(figsize=(fig_w, fig_h), facecolor="#08081a")
+    fig = plt.figure(figsize=(fig_w, fig_h), facecolor="white")
     ax  = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, fig_w)
     ax.set_ylim(0, fig_h)
-    ax.set_facecolor("#08081a")
+    ax.set_facecolor("white")
     ax.axis("off")
 
     y_ttl   = fig_h - 0.22 - ttl_h / 2
@@ -918,25 +933,25 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
             f"lat {lat_deg:+.4f}°  lon {lon_deg:+.4f}°  "
             f"crépuscule nautique (soleil < {twilight_deg}°)  ·  "
             f"{len(vis)} visibles / {n_rows} objets",
-            ha="center", va="center", color="#ccd8ff",
+            ha="center", va="center", color="#111133",
             fontsize=11, fontweight="bold")
 
     # ── En-tête ────────────────────────────────────────────────────────────────
     ax.add_patch(plt.Rectangle((0.15, y_hdr - hdr_h / 2),
-                               fig_w - 0.3, hdr_h, color="#1a2040", zorder=1))
+                               fig_w - 0.3, hdr_h, color="#dde3f5", zorder=1))
 
     # Labels colonnes texte
     for lbl, xc, ha in [("M#", 0.65, "right"), ("Nom", 1.00, "left"),
                          ("Type", 3.10, "left"), ("Alt max", 18.30, "center"),
                          ("Azimut", 19.30, "center")]:
         ax.text(xc, y_hdr, lbl, ha=ha, va="center",
-                color="#aabbee", fontsize=8, fontweight="bold",
+                color="#222244", fontsize=8, fontweight="bold",
                 fontfamily="monospace")
 
     # Label colonne barre
     ax.text((BAR_X0 + BAR_X1) / 2, y_hdr + 0.10,
             "Fenêtre de visibilité  (Heure UTC)",
-            ha="center", va="bottom", color="#8899cc",
+            ha="center", va="bottom", color="#334477",
             fontsize=7, fontweight="bold", fontfamily="monospace")
 
     # Ticks horaires (toutes les heures)
@@ -951,11 +966,11 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
             # Gros tick toutes les 2h, petits entre
             is_major = (h_label % 2 == 0)
             ax.plot([xp, xp], [y_hdr - 0.06, y_hdr - 0.01],
-                    color="#8899cc" if is_major else "#445577",
+                    color="#334477" if is_major else "#778899",
                     linewidth=0.9 if is_major else 0.5, zorder=3)
             if is_major:
                 ax.text(xp, y_hdr - 0.08, f"{h_label:02d}h",
-                        ha="center", va="top", color="#8899cc",
+                        ha="center", va="top", color="#334477",
                         fontsize=6.5, fontfamily="monospace")
 
     # ── Bande nuit sur toute la hauteur des données ────────────────────────────
@@ -964,7 +979,7 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
         nx1 = np.clip(x_of(night_idx[-1] * step_min / 60), BAR_X0, BAR_X1)
         ax.add_patch(plt.Rectangle(
             (nx0, y_data0 - data_h), nx1 - nx0, data_h,
-            color="#0d1535", alpha=0.55, zorder=1,
+            color="#dde8f8", alpha=0.6, zorder=1,
         ))
 
     # Lignes verticales des ticks sur toutes les lignes de données
@@ -974,31 +989,21 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
             total_min = int(round(toff * 60)) + 12 * 60
             h_label   = (total_min // 60) % 24
             ax.plot([xp, xp], [y_data0 - data_h, y_data0],
-                    color="#1e2d55" if h_label % 2 == 0 else "#141e3a",
+                    color="#aabbdd" if h_label % 2 == 0 else "#ccddee",
                     linewidth=0.4, alpha=0.7, zorder=2)
 
     # ── Lignes de données ──────────────────────────────────────────────────────
     for i, row in enumerate(all_rows):
         y = y_data0 - i * row_h - row_h / 2
 
-        # Séparateur visible / non-visible
-        if i == len(vis) and len(nv) > 0:
-            sep = y + row_h / 2
-            ax.plot([0.15, fig_w - 0.15], [sep, sep],
-                    color="#334466", linewidth=0.7, zorder=5)
-            ax.text((BAR_X0 + BAR_X1) / 2, sep + 0.03,
-                    "── objets non visibles cette nuit ──",
-                    ha="center", va="bottom", color="#445577",
-                    fontsize=6.5, fontstyle="italic")
-
         # Fond de ligne (alternance)
-        bg = ("#0e1535" if i % 2 == 0 else "#121a3a") if row["visible_tonight"] \
-             else ("#090914" if i % 2 == 0 else "#0b0b1a")
+        bg = ("#eef2ff" if i % 2 == 0 else "white") if row["visible_tonight"] \
+             else ("#f5f5f5" if i % 2 == 0 else "#f0f0f0")
         ax.add_patch(plt.Rectangle((0.15, y - row_h / 2),
                                    fig_w - 0.3, row_h, color=bg, zorder=1))
 
         style = TYPE_STYLE.get(row["type"], TYPE_STYLE["DS"])
-        tc    = style["color"] if row["visible_tonight"] else "#3d3d55"
+        tc    = style["color"] if row["visible_tonight"] else "#aaaaaa"
 
         # Colonnes texte
         for xc, ha, val in [
@@ -1024,11 +1029,11 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
                 (rise_x, by), bw, bh,
                 color=style["color"], alpha=0.72, zorder=3,
             ))
-            # Marqueur de transit (trait blanc vertical)
+            # Marqueur de transit (trait sombre vertical)
             if row["transit"]:
                 tr_x = np.clip(x_of(off(row["transit"])), BAR_X0, BAR_X1)
                 ax.plot([tr_x, tr_x], [by, by + bh],
-                        color="#ffffff", linewidth=1.1, alpha=0.88, zorder=4)
+                        color="#333333", linewidth=1.1, alpha=0.88, zorder=4)
 
     # ── Légende types en bas ───────────────────────────────────────────────────
     lx = 0.5
@@ -1099,6 +1104,106 @@ def compute_astro_night(date_str, lon_deg=LON_DEG, lat_deg=LAT_DEG,
     return times[twilight_idx], times[dawn_idx]
 
 
+def make_print_pages(obs_times, result_dir, date_str):
+    """
+    Génère 4 images A4 imprimables (5 petites cartes par page) :
+      - Pages 1 & 2 : cartes Alt/Az rectangulaires (5 par page, 10 au total)
+      - Pages 3 & 4 : cartes Alt/Az polaires       (5 par page, 10 au total)
+
+    Les 10 instants sont choisis uniformément sur la nuit astronomique.
+
+    Paramètres
+    ----------
+    obs_times : list of datetime
+        Liste des instants UTC déjà générés (crépuscule, heures, aube).
+    result_dir : str
+        Répertoire contenant les images individuelles déjà sauvegardées.
+    date_str : str
+        Date "YYYY-MM-DD" utilisée dans les noms de fichiers.
+    """
+    import matplotlib.image as mpimg
+
+    N_SELECT = 10   # nombre total d'instants à répartir sur les 2 pages
+
+    # ── Sélection de N_SELECT instants uniformément répartis ──────────────────
+    n = len(obs_times)
+    if n == 0:
+        return
+    elif n <= N_SELECT:
+        selected = list(obs_times)
+    else:
+        indices = [int(round(i * (n - 1) / (N_SELECT - 1))) for i in range(N_SELECT)]
+        selected = [obs_times[i] for i in indices]
+
+    # ── Chemins des images déjà générées ──────────────────────────────────────
+    altaz_paths, polar_paths, labels = [], [], []
+    for t in selected:
+        tag = t.strftime("%H%M")
+        ap = os.path.join(result_dir, f"messier_altaz_map_{date_str}_{tag}.png")
+        pp = os.path.join(result_dir, f"messier_altaz_map_polar_{date_str}_{tag}.png")
+        if os.path.exists(ap) and os.path.exists(pp):
+            altaz_paths.append(ap)
+            polar_paths.append(pp)
+            labels.append(t.strftime("%H:%M UTC"))
+
+    n_img = len(altaz_paths)
+    if n_img == 0:
+        print("Aucune image Alt/Az trouvée pour les pages d'impression.")
+        return
+
+    # Découpage en tranches de 5 images
+    chunks = [slice(i, i + 5) for i in range(0, n_img, 5)]
+    n_pages = len(chunks)
+
+    for p, sl in enumerate(chunks, 1):
+        a_paths = altaz_paths[sl]
+        po_paths = polar_paths[sl]
+        lbls = labels[sl]
+        n_chunk = len(a_paths)
+
+        # ── Page altaz : 1 colonne, 5 lignes ──────────────────────────────────
+        fig1, axes1 = plt.subplots(n_chunk, 1, figsize=(8.27, 11.69),
+                                   facecolor="white", squeeze=False)
+        fig1.suptitle(
+            f"Cartes Alt/Az — nuit du {date_str}  (page {p}/{n_pages})",
+            fontsize=12, fontweight="bold", color="#111133", y=0.998,
+        )
+        fig1.subplots_adjust(top=0.975, bottom=0.005, hspace=0.30,
+                             left=0.005, right=0.995)
+        for ax, path, lbl in zip(axes1.flatten(), a_paths, lbls):
+            ax.imshow(mpimg.imread(path), aspect="auto")
+            ax.axis("off")
+            ax.set_title(lbl, fontsize=8, color="#334466", pad=2)
+        out1 = os.path.join(result_dir,
+                            f"messier_print_altaz_{date_str}_p{p}.png")
+        fig1.savefig(out1, dpi=200, facecolor="white")
+        print(f"Page d'impression Alt/Az sauvegardée : {out1}")
+        plt.close(fig1)
+
+        # ── Page polaire : 2 colonnes ─────────────────────────────────────────
+        n_rows = (n_chunk + 1) // 2
+        fig2, axes2 = plt.subplots(n_rows, 2, figsize=(8.27, 11.69),
+                                   facecolor="white", squeeze=False)
+        fig2.suptitle(
+            f"Cartes Alt/Az polaires — nuit du {date_str}  (page {p}/{n_pages})",
+            fontsize=12, fontweight="bold", color="#111133", y=0.998,
+        )
+        fig2.subplots_adjust(top=0.975, bottom=0.005, hspace=0.15, wspace=0.05,
+                             left=0.005, right=0.995)
+        axes2_flat = axes2.flatten()
+        for ax, path, lbl in zip(axes2_flat, po_paths, lbls):
+            ax.imshow(mpimg.imread(path), aspect="auto")
+            ax.axis("off")
+            ax.set_title(lbl, fontsize=8, color="#334466", pad=2)
+        for ax in axes2_flat[n_chunk:]:
+            ax.set_visible(False)
+        out2 = os.path.join(result_dir,
+                            f"messier_print_polar_{date_str}_p{p}.png")
+        fig2.savefig(out2, dpi=200, facecolor="white")
+        print(f"Page d'impression polaire sauvegardée : {out2}")
+        plt.close(fig2)
+
+
 def main():
     import argparse
 
@@ -1143,6 +1248,11 @@ def main():
             utc_time=fallback,
             out=os.path.join(result_dir, f"messier_altaz_map_polar_{date_str}_0000.png"),
         )
+        fallback_dt = datetime(
+            int(date_str[:4]), int(date_str[5:7]), int(date_str[8:10]),
+            0, 0, tzinfo=timezone.utc,
+        )
+        make_print_pages([fallback_dt], result_dir, date_str)
         return
 
     twilight_dt = twilight_t.to_datetime(timezone=timezone.utc)
@@ -1186,6 +1296,10 @@ def main():
                 f"messier_altaz_map_polar_{date_str}_{hour_tag}.png",
             ),
         )
+
+    # ── Pages d'impression A4 (5 images par page) ─────────────────────────────
+    print("\nGénération des pages d'impression A4…")
+    make_print_pages(obs_times, result_dir, date_str)
 
 
 if __name__ == "__main__":
