@@ -9,4 +9,5 @@ wheels/
 # Virtual environments
 .venv
 .mypy_cache
-messier_sky_map.png
+result/
+.DS_Store
