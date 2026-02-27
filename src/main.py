@@ -864,10 +864,11 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
                           elevation_m=0.0, step_min=5, twilight_deg=-12.0,
                           out="messier_visibility.png"):
     """
-    Génère un tableau de visibilité avec une barre temporelle par objet.
+    Génère un tableau de visibilité sur 2 pages avec une barre temporelle par objet.
 
     Colonnes : M# · Nom · Type · [barre horaire] · Alt max · Azimut
     La barre horaire montre la fenêtre de visibilité sur fond de nuit astronomique.
+    Produit 2 fichiers : <out>_p1.png et <out>_p2.png.
     """
     from astropy.coordinates import get_sun as _get_sun
 
@@ -896,7 +897,7 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
     all_rows += [r for r in rows if r["number"] not in listed]
 
     vis = [r for r in rows if r["visible_tonight"]]
-    n_rows = len(all_rows)
+    n_total = len(all_rows)
 
     # ── 2. Fenêtre nocturne pour l'axe temporel ───────────────────────────────
     # Échantillonnage du soleil sur les 24h depuis midi UTC
@@ -918,59 +919,13 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
     else:
         t_start_h, t_end_h = 6.0, 18.0   # fallback
 
-    BAR_X0, BAR_X1 = 4.5, 17.8
+    BAR_X0, BAR_X1 = 5.0, 17.5
     bar_w = BAR_X1 - BAR_X0
 
     def x_of(off_h):
         return BAR_X0 + (off_h - t_start_h) / (t_end_h - t_start_h) * bar_w
 
-    # ── 3. Figure ──────────────────────────────────────────────────────────────
-    row_h = 0.20
-    hdr_h = 0.52    # assez haut pour les labels horaires
-    ttl_h = 0.72
-    fig_h = n_rows * row_h + hdr_h + ttl_h + 0.45
-    fig_w = 20.0
-
-    fig = plt.figure(figsize=(fig_w, fig_h), facecolor="white")
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, fig_w)
-    ax.set_ylim(0, fig_h)
-    ax.set_facecolor("white")
-    ax.axis("off")
-
-    y_ttl = fig_h - 0.22 - ttl_h / 2
-    y_hdr = fig_h - 0.22 - ttl_h - hdr_h / 2
-    y_data0 = fig_h - 0.22 - ttl_h - hdr_h
-    data_h = n_rows * row_h
-
-    # ── Titre ──────────────────────────────────────────────────────────────────
-    ax.text(fig_w / 2, y_ttl,
-            f"Visibilité des objets Messier — nuit du {date_str}\n"
-            f"lat {lat_deg:+.4f}°  lon {lon_deg:+.4f}°  "
-            f"crépuscule nautique (soleil < {twilight_deg}°)  ·  "
-            f"{len(vis)} visibles / {n_rows} objets",
-            ha="center", va="center", color="#111133",
-            fontsize=11, fontweight="bold")
-
-    # ── En-tête ────────────────────────────────────────────────────────────────
-    ax.add_patch(plt.Rectangle((0.15, y_hdr - hdr_h / 2),
-                               fig_w - 0.3, hdr_h, color="#dde3f5", zorder=1))
-
-    # Labels colonnes texte
-    for lbl, xc, ha in [("M#", 0.65, "right"), ("Nom", 1.00, "left"),
-                        ("Type", 3.10, "left"), ("Alt max", 18.30, "center"),
-                        ("Azimut", 19.30, "center")]:
-        ax.text(xc, y_hdr, lbl, ha=ha, va="center",
-                color="#222244", fontsize=8, fontweight="bold",
-                fontfamily="monospace")
-
-    # Label colonne barre
-    ax.text((BAR_X0 + BAR_X1) / 2, y_hdr + 0.10,
-            "Fenêtre de visibilité  (Heure Paris)",
-            ha="center", va="bottom", color="#334477",
-            fontsize=7, fontweight="bold", fontfamily="monospace")
-
-    # Ticks horaires (toutes les heures)
+    # Ticks horaires (pré-calculés, communs aux 2 pages)
     tick_step = 1
     first_tick = np.ceil(t_start_h / tick_step) * tick_step
     tick_offs = np.arange(first_tick, t_end_h + 0.01, tick_step)
@@ -978,93 +933,143 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
         int(date_str[:4]), int(date_str[5:7]), int(date_str[8:10]),
         12, 0, tzinfo=timezone.utc,
     )
-    for toff in tick_offs:
-        xp = x_of(toff)
-        if BAR_X0 - 0.01 <= xp <= BAR_X1 + 0.01:
-            h_label = _to_paris(_base_utc + timedelta(hours=toff)).hour
-            # Gros tick toutes les 2h, petits entre
-            is_major = (h_label % 2 == 0)
-            ax.plot([xp, xp], [y_hdr - 0.06, y_hdr - 0.01],
-                    color="#334477" if is_major else "#778899",
-                    linewidth=0.9 if is_major else 0.5, zorder=3)
-            if is_major:
-                ax.text(xp, y_hdr - 0.08, f"{h_label:02d}h",
-                        ha="center", va="top", color="#334477",
-                        fontsize=6.5, fontfamily="monospace")
 
-    # ── Bande nuit sur toute la hauteur des données ────────────────────────────
-    if len(night_idx) > 0:
-        nx0 = np.clip(x_of(night_idx[0] * step_min / 60), BAR_X0, BAR_X1)
-        nx1 = np.clip(x_of(night_idx[-1] * step_min / 60), BAR_X0, BAR_X1)
-        ax.add_patch(plt.Rectangle(
-            (nx0, y_data0 - data_h), nx1 - nx0, data_h,
-            color="#dde8f8", alpha=0.6, zorder=1,
-        ))
+    # ── 3. Découpage en 2 pages ────────────────────────────────────────────────
+    mid = (n_total + 1) // 2
+    pages = [all_rows[:mid], all_rows[mid:]]
+    base, ext = os.path.splitext(out)
 
-    # Lignes verticales des ticks sur toutes les lignes de données
-    for toff in tick_offs:
-        xp = x_of(toff)
-        if BAR_X0 - 0.01 <= xp <= BAR_X1 + 0.01:
-            h_label = _to_paris(_base_utc + timedelta(hours=toff)).hour
-            ax.plot([xp, xp], [y_data0 - data_h, y_data0],
-                    color="#aabbdd" if h_label % 2 == 0 else "#ccddee",
-                    linewidth=0.4, alpha=0.7, zorder=2)
+    for page_idx, page_rows in enumerate(pages, 1):
+        n_rows = len(page_rows)
+        row_h = 0.30
+        hdr_h = 0.70
+        ttl_h = 0.90
+        fig_h = n_rows * row_h + hdr_h + ttl_h + 0.55
+        fig_w = 20.0
 
-    # ── Lignes de données ──────────────────────────────────────────────────────
-    for i, row in enumerate(all_rows):
-        y = y_data0 - i * row_h - row_h / 2
+        fig = plt.figure(figsize=(fig_w, fig_h), facecolor="white")
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.set_xlim(0, fig_w)
+        ax.set_ylim(0, fig_h)
+        ax.set_facecolor("white")
+        ax.axis("off")
 
-        # Fond de ligne (alternance)
-        bg = ("#eef2ff" if i % 2 == 0 else "white") if row["visible_tonight"] \
-            else ("#f5f5f5" if i % 2 == 0 else "#f0f0f0")
-        ax.add_patch(plt.Rectangle((0.15, y - row_h / 2),
-                                   fig_w - 0.3, row_h, color=bg, zorder=1))
+        y_ttl = fig_h - 0.22 - ttl_h / 2
+        y_hdr = fig_h - 0.22 - ttl_h - hdr_h / 2
+        y_data0 = fig_h - 0.22 - ttl_h - hdr_h
+        data_h = n_rows * row_h
 
-        style = TYPE_STYLE.get(row["type"], TYPE_STYLE["DS"])
-        tc = style["color"] if row["visible_tonight"] else "#aaaaaa"
+        # ── Titre ──────────────────────────────────────────────────────────────
+        ax.text(fig_w / 2, y_ttl,
+                f"Visibilité des objets Messier — nuit du {date_str}  "
+                f"(page {page_idx}/2)\n"
+                f"lat {lat_deg:+.4f}°  lon {lon_deg:+.4f}°  "
+                f"crépuscule nautique (soleil < {twilight_deg}°)  ·  "
+                f"{len(vis)} visibles / {n_total} objets",
+                ha="center", va="center", color="#111133",
+                fontsize=13, fontweight="bold")
 
-        # Colonnes texte
-        for xc, ha, val in [
-            (0.65,  "right",  f"M{row['number']:>3}"),
-            (1.00,  "left",   (row["name"] or "—")[:18]),
-            (3.10,  "left",   _SHORT_TYPE.get(row["type"], row["type"])),
-            (18.30, "center", f"{row['alt_max']:+.1f}°"),
-            (19.30, "center", f"{row['az_transit']:.1f}°"
-             if row["az_transit"] is not None else "—"),
-        ]:
-            ax.text(xc, y, val, ha=ha, va="center",
-                    color=tc, fontsize=7, fontfamily="monospace")
+        # ── En-tête ────────────────────────────────────────────────────────────
+        ax.add_patch(plt.Rectangle((0.15, y_hdr - hdr_h / 2),
+                                   fig_w - 0.3, hdr_h, color="#dde3f5",
+                                   zorder=1))
 
-        # ── Barre de visibilité ────────────────────────────────────────────────
-        if row["visible_tonight"] and row["rise"] and row["set"]:
-            rise_x = np.clip(x_of(off(row["rise"])), BAR_X0, BAR_X1)
-            set_x = np.clip(x_of(off(row["set"])),  BAR_X0, BAR_X1)
-            bh = row_h * 0.54
-            by = y - bh / 2
-            # Barre principale (avec largeur minimale visible)
-            bw = max(set_x - rise_x, 0.04)
+        for lbl, xc, ha in [("M#", 0.75, "right"), ("Nom", 1.15, "left"),
+                            ("Type", 3.50, "left"), ("Alt max", 18.10, "center"),
+                            ("Azimut", 19.20, "center")]:
+            ax.text(xc, y_hdr, lbl, ha=ha, va="center",
+                    color="#222244", fontsize=11, fontweight="bold",
+                    fontfamily="monospace")
+
+        ax.text((BAR_X0 + BAR_X1) / 2, y_hdr + 0.12,
+                "Fenêtre de visibilité  (Heure Paris)",
+                ha="center", va="bottom", color="#334477",
+                fontsize=9, fontweight="bold", fontfamily="monospace")
+
+        # Ticks horaires
+        for toff in tick_offs:
+            xp = x_of(toff)
+            if BAR_X0 - 0.01 <= xp <= BAR_X1 + 0.01:
+                h_label = _to_paris(_base_utc + timedelta(hours=toff)).hour
+                is_major = (h_label % 2 == 0)
+                ax.plot([xp, xp], [y_hdr - 0.08, y_hdr - 0.01],
+                        color="#334477" if is_major else "#778899",
+                        linewidth=0.9 if is_major else 0.5, zorder=3)
+                if is_major:
+                    ax.text(xp, y_hdr - 0.10, f"{h_label:02d}h",
+                            ha="center", va="top", color="#334477",
+                            fontsize=8.5, fontfamily="monospace")
+
+        # ── Bande nuit ─────────────────────────────────────────────────────────
+        if len(night_idx) > 0:
+            nx0 = np.clip(x_of(night_idx[0] * step_min / 60), BAR_X0, BAR_X1)
+            nx1 = np.clip(x_of(night_idx[-1] * step_min / 60), BAR_X0, BAR_X1)
             ax.add_patch(plt.Rectangle(
-                (rise_x, by), bw, bh,
-                color=style["color"], alpha=0.72, zorder=3,
+                (nx0, y_data0 - data_h), nx1 - nx0, data_h,
+                color="#dde8f8", alpha=0.6, zorder=1,
             ))
-            # Marqueur de transit (trait sombre vertical)
-            if row["transit"]:
-                tr_x = np.clip(x_of(off(row["transit"])), BAR_X0, BAR_X1)
-                ax.plot([tr_x, tr_x], [by, by + bh],
-                        color="#333333", linewidth=1.1, alpha=0.88, zorder=4)
 
-    # ── Légende types en bas ───────────────────────────────────────────────────
-    lx = 0.5
-    for otype, style in TYPE_STYLE.items():
-        ax.text(lx, 0.15, f"■ {_SHORT_TYPE.get(otype, otype)} ({otype})",
-                ha="left", va="center", color=style["color"],
-                fontsize=6, fontfamily="monospace")
-        lx += 2.45
+        for toff in tick_offs:
+            xp = x_of(toff)
+            if BAR_X0 - 0.01 <= xp <= BAR_X1 + 0.01:
+                h_label = _to_paris(_base_utc + timedelta(hours=toff)).hour
+                ax.plot([xp, xp], [y_data0 - data_h, y_data0],
+                        color="#aabbdd" if h_label % 2 == 0 else "#ccddee",
+                        linewidth=0.4, alpha=0.7, zorder=2)
 
-    plt.savefig(out, dpi=150, bbox_inches="tight",
-                facecolor=fig.get_facecolor())
-    print(f"Tableau sauvegardé : {out}")
-    plt.close(fig)
+        # ── Lignes de données ──────────────────────────────────────────────────
+        for i, row in enumerate(page_rows):
+            y = y_data0 - i * row_h - row_h / 2
+
+            bg = ("#eef2ff" if i % 2 == 0 else "white") \
+                if row["visible_tonight"] \
+                else ("#f5f5f5" if i % 2 == 0 else "#f0f0f0")
+            ax.add_patch(plt.Rectangle((0.15, y - row_h / 2),
+                                       fig_w - 0.3, row_h, color=bg, zorder=1))
+
+            style = TYPE_STYLE.get(row["type"], TYPE_STYLE["DS"])
+            tc = style["color"] if row["visible_tonight"] else "#aaaaaa"
+
+            for xc, ha, val in [
+                (0.75,  "right",  f"M{row['number']:>3}"),
+                (1.15,  "left",   (row["name"] or "—")[:18]),
+                (3.50,  "left",   _SHORT_TYPE.get(row["type"], row["type"])),
+                (18.10, "center", f"{row['alt_max']:+.1f}°"),
+                (19.20, "center", f"{row['az_transit']:.1f}°"
+                 if row["az_transit"] is not None else "—"),
+            ]:
+                ax.text(xc, y, val, ha=ha, va="center",
+                        color=tc, fontsize=10, fontfamily="monospace")
+
+            # ── Barre de visibilité ────────────────────────────────────────────
+            if row["visible_tonight"] and row["rise"] and row["set"]:
+                rise_x = np.clip(x_of(off(row["rise"])), BAR_X0, BAR_X1)
+                set_x = np.clip(x_of(off(row["set"])),  BAR_X0, BAR_X1)
+                bh = row_h * 0.54
+                by = y - bh / 2
+                bw = max(set_x - rise_x, 0.04)
+                ax.add_patch(plt.Rectangle(
+                    (rise_x, by), bw, bh,
+                    color=style["color"], alpha=0.72, zorder=3,
+                ))
+                if row["transit"]:
+                    tr_x = np.clip(x_of(off(row["transit"])), BAR_X0, BAR_X1)
+                    ax.plot([tr_x, tr_x], [by, by + bh],
+                            color="#333333", linewidth=1.4, alpha=0.88, zorder=4)
+
+        # ── Légende types en bas ───────────────────────────────────────────────
+        lx = 0.5
+        for otype, st in TYPE_STYLE.items():
+            ax.text(lx, 0.18, f"■ {_SHORT_TYPE.get(otype, otype)} ({otype})",
+                    ha="left", va="center", color=st["color"],
+                    fontsize=8, fontfamily="monospace")
+            lx += 2.45
+
+        out_path = f"{base}_p{page_idx}{ext}"
+        plt.savefig(out_path, dpi=200, bbox_inches="tight",
+                    facecolor=fig.get_facecolor())
+        print(f"Tableau sauvegardé : {out_path}")
+        plt.close(fig)
 
 
 def compute_astro_night(date_str, lon_deg=LON_DEG, lat_deg=LAT_DEG,
