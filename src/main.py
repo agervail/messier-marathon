@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from adjustText import adjust_text
 
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz
@@ -14,8 +15,8 @@ from messier_catalog import MESSIER_OBJECTS
 from constellations import get_boundaries, FRENCH_NAMES
 from constellation_lines import get_lines
 
-LON_DEG  = 5.86980    # Longitude de l'observateur (degrés, positif vers l'Est)
-LAT_DEG  = 44.56410   # Latitude de l'observateur (degrés, positif vers le Nord)
+LON_DEG = 5.86980    # Longitude de l'observateur (degrés, positif vers l'Est)
+LAT_DEG = 44.56410   # Latitude de l'observateur (degrés, positif vers le Nord)
 DATE_STR = "2025-03-21"  # Date d'observation (YYYY-MM-DD)
 
 # Visual style per object type  (colours chosen for white background)
@@ -29,6 +30,13 @@ TYPE_STYLE = {
     "SC":  {"color": "#555555", "marker": "+",  "size": 80,  "label": "Nuage stellaire"},
     "DS":  {"color": "#777777", "marker": "x",  "size": 60,  "label": "Étoile double"},
 }
+
+PARIS_TZ = ZoneInfo("Europe/Paris")
+
+
+def _to_paris(dt_utc: datetime) -> datetime:
+    """Convertit un datetime UTC en heure locale de Paris (CET/CEST)."""
+    return dt_utc.astimezone(PARIS_TZ)
 
 
 def equatorial_to_altaz(ra_deg, dec_deg, lon_deg, lat_deg, utc_time, elevation_m=0.0):
@@ -215,6 +223,7 @@ def load_horizon(path=None):
                 except ValueError:
                     continue
 
+    # Convertir de Stellarium (0°=Sud, croissant vers Ouest) à notre convention (0°=Nord, croissant vers Est)
     az = np.array(az_list)
     alt = np.array(alt_list)
     order = np.argsort(az)
@@ -542,10 +551,13 @@ def make_altaz_map(lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     # ── Titre ─────────────────────────────────────────────────────────────────
     loc_str = f"lat {lat_deg:+.2f}°  lon {lon_deg:+.2f}°  alt {elevation_m:.0f} m"
-    time_str = utc_time if isinstance(utc_time, str) else str(utc_time)
+    _utc_str = utc_time if isinstance(utc_time, str) else str(utc_time)
+    _utc_dt = datetime.strptime(
+        _utc_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    time_str = _to_paris(_utc_dt).strftime("%Y-%m-%d %H:%M")
     ax.set_title(
         f"Catalogue de Messier — Coordonnées Alt/Az\n"
-        f"{loc_str}  ·  {time_str} UTC  ·  "
+        f"{loc_str}  ·  {time_str} (heure Paris)  ·  "
         f"{len(visible_m)} objets Messier visibles sur {len(data['messier'])}",
         fontsize=13, color="#111133", fontweight="bold", pad=12,
     )
@@ -583,7 +595,7 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
     Génère une carte du ciel polaire en coordonnées Alt/Az (vue depuis le sol).
 
     Le centre du cercle = zénith (alt 90°), le bord = horizon (alt 0°).
-    Nord en haut, azimut croissant dans le sens horaire (N→E→S→O).
+    Nord en haut, Est à gauche (vue depuis le sol, en regardant le ciel).
 
     Paramètres
     ----------
@@ -618,9 +630,9 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
                            facecolor="white")
     ax.set_facecolor("white")
 
-    # Nord en haut, azimut croissant dans le sens horaire (N→E→S→O)
+    # Nord en haut, Est à gauche (vue depuis le sol, en regardant le ciel)
     ax.set_theta_zero_location("N")
-    ax.set_theta_direction(-1)
+    ax.set_theta_direction(1)
 
     # r = 90 − altitude  →  zénith au centre (r=0), horizon au bord (r=90)
     ax.set_rlim(0, 90)
@@ -714,10 +726,13 @@ def make_altaz_map_polar(lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     # ── Titre ─────────────────────────────────────────────────────────────────
     loc_str = f"lat {lat_deg:+.2f}°  lon {lon_deg:+.2f}°  alt {elevation_m:.0f} m"
-    time_str = utc_time if isinstance(utc_time, str) else str(utc_time)
+    _utc_str = utc_time if isinstance(utc_time, str) else str(utc_time)
+    _utc_dt = datetime.strptime(
+        _utc_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    time_str = _to_paris(_utc_dt).strftime("%Y-%m-%d %H:%M")
     ax.set_title(
         f"Catalogue de Messier — Vue Alt/Az (polaire)\n"
-        f"{loc_str}  ·  {time_str} UTC\n"
+        f"{loc_str}  ·  {time_str} (heure Paris)\n"
         f"{len(visible_m)} objets Messier visibles sur {len(data['messier'])}",
         fontsize=11, color="#111133", fontweight="bold", pad=20,
     )
@@ -874,22 +889,23 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
                            if line.strip().startswith("M")]
 
     rows_by_number = {r["number"]: r for r in rows}
-    all_rows = [rows_by_number[n] for n in ordered_numbers if n in rows_by_number]
+    all_rows = [rows_by_number[n]
+                for n in ordered_numbers if n in rows_by_number]
     # Ajouter les objets absents du fichier (sécurité)
     listed = set(ordered_numbers)
     all_rows += [r for r in rows if r["number"] not in listed]
 
-    vis    = [r for r in rows if r["visible_tonight"]]
+    vis = [r for r in rows if r["visible_tonight"]]
     n_rows = len(all_rows)
 
     # ── 2. Fenêtre nocturne pour l'axe temporel ───────────────────────────────
     # Échantillonnage du soleil sur les 24h depuis midi UTC
-    t0    = Time(f"{date_str} 12:00:00", scale="utc")
-    n_t   = int(24 * 60 / step_min)
+    t0 = Time(f"{date_str} 12:00:00", scale="utc")
+    n_t = int(24 * 60 / step_min)
     times = t0 + np.arange(n_t) * step_min * u.min
-    loc   = EarthLocation(lon=lon_deg * u.deg, lat=lat_deg * u.deg,
-                          height=elevation_m * u.m)
-    fa    = AltAz(obstime=times, location=loc)
+    loc = EarthLocation(lon=lon_deg * u.deg, lat=lat_deg * u.deg,
+                        height=elevation_m * u.m)
+    fa = AltAz(obstime=times, location=loc)
     sun_a = _get_sun(times).transform_to(fa).alt.deg
     is_night = sun_a < twilight_deg
     if not np.any(is_night):
@@ -897,8 +913,8 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     night_idx = np.where(is_night)[0]
     if len(night_idx) > 0:
-        t_start_h = max(0.0, night_idx[0]  * step_min / 60 - 0.75)
-        t_end_h   = min(24.0, night_idx[-1] * step_min / 60 + 0.75)
+        t_start_h = max(0.0, night_idx[0] * step_min / 60 - 0.75)
+        t_end_h = min(24.0, night_idx[-1] * step_min / 60 + 0.75)
     else:
         t_start_h, t_end_h = 6.0, 18.0   # fallback
 
@@ -909,23 +925,23 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
         return BAR_X0 + (off_h - t_start_h) / (t_end_h - t_start_h) * bar_w
 
     # ── 3. Figure ──────────────────────────────────────────────────────────────
-    row_h  = 0.20
-    hdr_h  = 0.52    # assez haut pour les labels horaires
-    ttl_h  = 0.72
-    fig_h  = n_rows * row_h + hdr_h + ttl_h + 0.45
-    fig_w  = 20.0
+    row_h = 0.20
+    hdr_h = 0.52    # assez haut pour les labels horaires
+    ttl_h = 0.72
+    fig_h = n_rows * row_h + hdr_h + ttl_h + 0.45
+    fig_w = 20.0
 
     fig = plt.figure(figsize=(fig_w, fig_h), facecolor="white")
-    ax  = fig.add_axes([0, 0, 1, 1])
+    ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, fig_w)
     ax.set_ylim(0, fig_h)
     ax.set_facecolor("white")
     ax.axis("off")
 
-    y_ttl   = fig_h - 0.22 - ttl_h / 2
-    y_hdr   = fig_h - 0.22 - ttl_h - hdr_h / 2
+    y_ttl = fig_h - 0.22 - ttl_h / 2
+    y_hdr = fig_h - 0.22 - ttl_h - hdr_h / 2
     y_data0 = fig_h - 0.22 - ttl_h - hdr_h
-    data_h  = n_rows * row_h
+    data_h = n_rows * row_h
 
     # ── Titre ──────────────────────────────────────────────────────────────────
     ax.text(fig_w / 2, y_ttl,
@@ -942,27 +958,30 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     # Labels colonnes texte
     for lbl, xc, ha in [("M#", 0.65, "right"), ("Nom", 1.00, "left"),
-                         ("Type", 3.10, "left"), ("Alt max", 18.30, "center"),
-                         ("Azimut", 19.30, "center")]:
+                        ("Type", 3.10, "left"), ("Alt max", 18.30, "center"),
+                        ("Azimut", 19.30, "center")]:
         ax.text(xc, y_hdr, lbl, ha=ha, va="center",
                 color="#222244", fontsize=8, fontweight="bold",
                 fontfamily="monospace")
 
     # Label colonne barre
     ax.text((BAR_X0 + BAR_X1) / 2, y_hdr + 0.10,
-            "Fenêtre de visibilité  (Heure UTC)",
+            "Fenêtre de visibilité  (Heure Paris)",
             ha="center", va="bottom", color="#334477",
             fontsize=7, fontweight="bold", fontfamily="monospace")
 
     # Ticks horaires (toutes les heures)
     tick_step = 1
     first_tick = np.ceil(t_start_h / tick_step) * tick_step
-    tick_offs  = np.arange(first_tick, t_end_h + 0.01, tick_step)
+    tick_offs = np.arange(first_tick, t_end_h + 0.01, tick_step)
+    _base_utc = datetime(
+        int(date_str[:4]), int(date_str[5:7]), int(date_str[8:10]),
+        12, 0, tzinfo=timezone.utc,
+    )
     for toff in tick_offs:
         xp = x_of(toff)
         if BAR_X0 - 0.01 <= xp <= BAR_X1 + 0.01:
-            total_min = int(round(toff * 60)) + 12 * 60
-            h_label   = (total_min // 60) % 24
+            h_label = _to_paris(_base_utc + timedelta(hours=toff)).hour
             # Gros tick toutes les 2h, petits entre
             is_major = (h_label % 2 == 0)
             ax.plot([xp, xp], [y_hdr - 0.06, y_hdr - 0.01],
@@ -975,7 +994,7 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
     # ── Bande nuit sur toute la hauteur des données ────────────────────────────
     if len(night_idx) > 0:
-        nx0 = np.clip(x_of(night_idx[0]  * step_min / 60), BAR_X0, BAR_X1)
+        nx0 = np.clip(x_of(night_idx[0] * step_min / 60), BAR_X0, BAR_X1)
         nx1 = np.clip(x_of(night_idx[-1] * step_min / 60), BAR_X0, BAR_X1)
         ax.add_patch(plt.Rectangle(
             (nx0, y_data0 - data_h), nx1 - nx0, data_h,
@@ -986,8 +1005,7 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
     for toff in tick_offs:
         xp = x_of(toff)
         if BAR_X0 - 0.01 <= xp <= BAR_X1 + 0.01:
-            total_min = int(round(toff * 60)) + 12 * 60
-            h_label   = (total_min // 60) % 24
+            h_label = _to_paris(_base_utc + timedelta(hours=toff)).hour
             ax.plot([xp, xp], [y_data0 - data_h, y_data0],
                     color="#aabbdd" if h_label % 2 == 0 else "#ccddee",
                     linewidth=0.4, alpha=0.7, zorder=2)
@@ -998,12 +1016,12 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
 
         # Fond de ligne (alternance)
         bg = ("#eef2ff" if i % 2 == 0 else "white") if row["visible_tonight"] \
-             else ("#f5f5f5" if i % 2 == 0 else "#f0f0f0")
+            else ("#f5f5f5" if i % 2 == 0 else "#f0f0f0")
         ax.add_patch(plt.Rectangle((0.15, y - row_h / 2),
                                    fig_w - 0.3, row_h, color=bg, zorder=1))
 
         style = TYPE_STYLE.get(row["type"], TYPE_STYLE["DS"])
-        tc    = style["color"] if row["visible_tonight"] else "#aaaaaa"
+        tc = style["color"] if row["visible_tonight"] else "#aaaaaa"
 
         # Colonnes texte
         for xc, ha, val in [
@@ -1020,9 +1038,9 @@ def make_visibility_table(date_str=DATE_STR, lon_deg=LON_DEG, lat_deg=LAT_DEG,
         # ── Barre de visibilité ────────────────────────────────────────────────
         if row["visible_tonight"] and row["rise"] and row["set"]:
             rise_x = np.clip(x_of(off(row["rise"])), BAR_X0, BAR_X1)
-            set_x  = np.clip(x_of(off(row["set"])),  BAR_X0, BAR_X1)
-            bh     = row_h * 0.54
-            by     = y - bh / 2
+            set_x = np.clip(x_of(off(row["set"])),  BAR_X0, BAR_X1)
+            bh = row_h * 0.54
+            by = y - bh / 2
             # Barre principale (avec largeur minimale visible)
             bw = max(set_x - rise_x, 0.04)
             ax.add_patch(plt.Rectangle(
@@ -1076,17 +1094,17 @@ def compute_astro_night(date_str, lon_deg=LON_DEG, lat_deg=LAT_DEG,
     ASTRO_DEG = -18.0           # seuil crépuscule/aube astronomique
 
     # Échantillonnage minute par minute de midi à midi+1
-    t0    = Time(f"{date_str} 12:00:00", scale="utc")
-    n_t   = 24 * 60             # 1 440 points
+    t0 = Time(f"{date_str} 12:00:00", scale="utc")
+    n_t = 24 * 60             # 1 440 points
     times = t0 + np.arange(n_t) * 1 * u.min
 
-    loc   = EarthLocation(lon=lon_deg * u.deg, lat=lat_deg * u.deg,
-                          height=elevation_m * u.m)
+    loc = EarthLocation(lon=lon_deg * u.deg, lat=lat_deg * u.deg,
+                        height=elevation_m * u.m)
     frame = AltAz(obstime=times, location=loc)
     sun_alt = get_sun(times).transform_to(frame).alt.deg
 
     twilight_idx = None
-    dawn_idx     = None
+    dawn_idx = None
 
     for i in range(1, n_t):
         # Première descente sous -18° → crépuscule astronomique
@@ -1132,19 +1150,23 @@ def make_print_pages(obs_times, result_dir, date_str):
     elif n <= N_SELECT:
         selected = list(obs_times)
     else:
-        indices = [int(round(i * (n - 1) / (N_SELECT - 1))) for i in range(N_SELECT)]
+        indices = [int(round(i * (n - 1) / (N_SELECT - 1)))
+                   for i in range(N_SELECT)]
         selected = [obs_times[i] for i in indices]
 
     # ── Chemins des images déjà générées ──────────────────────────────────────
     altaz_paths, polar_paths, labels = [], [], []
     for t in selected:
-        tag = t.strftime("%H%M")
-        ap = os.path.join(result_dir, f"messier_altaz_map_{date_str}_{tag}.png")
-        pp = os.path.join(result_dir, f"messier_altaz_map_polar_{date_str}_{tag}.png")
+        paris_t = _to_paris(t)
+        tag = paris_t.strftime("%H%M")
+        ap = os.path.join(
+            result_dir, f"messier_altaz_map_{date_str}_{tag}.png")
+        pp = os.path.join(
+            result_dir, f"messier_altaz_map_polar_{date_str}_{tag}.png")
         if os.path.exists(ap) and os.path.exists(pp):
             altaz_paths.append(ap)
             polar_paths.append(pp)
-            labels.append(t.strftime("%H:%M UTC"))
+            labels.append(paris_t.strftime("%H:%M Paris"))
 
     n_img = len(altaz_paths)
     if n_img == 0:
@@ -1237,36 +1259,41 @@ def main():
     if twilight_t is None or dawn_t is None:
         print("Aucune nuit astronomique complète pour cette date et ce lieu.")
         print("Génération d'une seule image Alt/Az à minuit UTC comme repli.")
-        fallback = f"{date_str} 00:00:00"
+        fallback_dt = datetime(
+            int(date_str[:4]), int(date_str[5:7]), int(date_str[8:10]),
+            0, 0, tzinfo=timezone.utc,
+        )
+        fallback = fallback_dt.strftime("%Y-%m-%d %H:%M:%S")
+        fallback_tag = _to_paris(fallback_dt).strftime("%H%M")
         make_altaz_map(
             lon_deg=LON_DEG, lat_deg=LAT_DEG,
             utc_time=fallback,
-            out=os.path.join(result_dir, f"messier_altaz_map_{date_str}_0000.png"),
+            out=os.path.join(
+                result_dir, f"messier_altaz_map_{date_str}_{fallback_tag}.png"),
         )
         make_altaz_map_polar(
             lon_deg=LON_DEG, lat_deg=LAT_DEG,
             utc_time=fallback,
-            out=os.path.join(result_dir, f"messier_altaz_map_polar_{date_str}_0000.png"),
-        )
-        fallback_dt = datetime(
-            int(date_str[:4]), int(date_str[5:7]), int(date_str[8:10]),
-            0, 0, tzinfo=timezone.utc,
+            out=os.path.join(
+                result_dir, f"messier_altaz_map_polar_{date_str}_{fallback_tag}.png"),
         )
         make_print_pages([fallback_dt], result_dir, date_str)
         return
 
     twilight_dt = twilight_t.to_datetime(timezone=timezone.utc)
-    dawn_dt     = dawn_t.to_datetime(timezone=timezone.utc)
+    dawn_dt = dawn_t.to_datetime(timezone=timezone.utc)
 
-    print(f"  Crépuscule astronomique : {twilight_dt.strftime('%Y-%m-%d %H:%M')} UTC")
-    print(f"  Aube astronomique       : {dawn_dt.strftime('%Y-%m-%d %H:%M')} UTC")
+    print(
+        f"  Crépuscule astronomique : {twilight_dt.strftime('%Y-%m-%d %H:%M')} UTC")
+    print(
+        f"  Aube astronomique       : {dawn_dt.strftime('%Y-%m-%d %H:%M')} UTC")
 
     # ── Construction de la liste des instants à représenter ──────────────────
     # crépuscule · chaque heure entière comprise dans la nuit · aube
     obs_times = [twilight_dt]
 
     first_full_hour = twilight_dt.replace(minute=0, second=0, microsecond=0) \
-                      + timedelta(hours=1)
+        + timedelta(hours=1)
     current = first_full_hour
     while current < dawn_dt:
         obs_times.append(current)
@@ -1277,8 +1304,8 @@ def main():
     # ── Génération des images Alt/Az pour chaque instant ─────────────────────
     print(f"\nGénération de {len(obs_times)} image(s) Alt/Az…")
     for t in obs_times:
-        utc_str  = t.strftime("%Y-%m-%d %H:%M:%S")
-        hour_tag = t.strftime("%H%M")
+        utc_str = t.strftime("%Y-%m-%d %H:%M:%S")
+        hour_tag = _to_paris(t).strftime("%H%M")
 
         make_altaz_map(
             lon_deg=LON_DEG, lat_deg=LAT_DEG,
