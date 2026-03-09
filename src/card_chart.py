@@ -231,5 +231,5 @@ def make_eyepiece_view(target_num, out=None):
 
 
 if __name__ == "__main__":
-    for n in range(40, 44):
+    for n in range(1, 111):
         make_eyepiece_view(n)
