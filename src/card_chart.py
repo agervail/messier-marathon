@@ -1,6 +1,7 @@
 """
 card_chart.py — Génère une vue oculaire pour les objets Messier.
-Télécharge les étoiles du champ via Vizier (Tycho-2) à chaque exécution.
+Télécharge les étoiles du champ via Vizier (Tycho-2) et une image DSS
+de l'objet depuis SkyView à chaque exécution.
 """
 
 import os
@@ -12,18 +13,40 @@ from matplotlib.patches import PathPatch
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astroquery.vizier import Vizier
+from astroquery.skyview import SkyView
+from astroquery.simbad import Simbad
+from astropy.visualization import ZScaleInterval
 
 from messier_catalog import MESSIER_OBJECTS
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 FOV_DEG = 1.8           # Champ de vue de l'oculaire (degrés)
 MAG_LIMIT = 11.5        # Magnitude limite des étoiles affichées
+DSS_PIXELS = 500        # Résolution de l'image DSS
+DSS_PADDING = 1.3       # Facteur de marge autour de l'objet pour le DSS
+DEFAULT_SIZE_ARCMIN = 10  # Taille par défaut si SIMBAD ne donne rien
 
 TYPE_LABEL = {
     "GC": "Globular Cluster", "OC": "Open Cluster", "Gx": "Galaxy",
     "EN": "Diffuse Nebula", "PN": "Planetary Nebula",
     "SNR": "Supernova Remnant", "SC": "Star Cloud", "DS": "Double Star",
 }
+
+
+def fetch_object_size(target_num):
+    """Récupère la taille angulaire (arcmin) de l'objet via SIMBAD."""
+    s = Simbad()
+    s.add_votable_fields("dim")
+    result = s.query_object(f"M {target_num}")
+    if result is None:
+        return DEFAULT_SIZE_ARCMIN
+    try:
+        maj = float(result["galdim_majaxis"][0])
+        if np.isnan(maj) or maj <= 0:
+            return DEFAULT_SIZE_ARCMIN
+        return maj
+    except (KeyError, TypeError, ValueError, IndexError):
+        return DEFAULT_SIZE_ARCMIN
 
 
 def fetch_field_stars(center_ra, center_dec):
@@ -52,6 +75,29 @@ def fetch_field_stars(center_ra, center_dec):
     return stars
 
 
+def fetch_dss_image(center_ra, center_dec, size_arcmin):
+    """Télécharge une image DSS2 Blue à la taille de l'objet."""
+    coord = SkyCoord(ra=center_ra, dec=center_dec, unit="deg", frame="icrs")
+    pos_str = coord.to_string("hmsdms")
+
+    # Taille avec marge, plafonnée à 0.5° (les très grands objets n'ont pas
+    # besoin d'un cutout DSS — les étoiles suffisent)
+    max_radius = 0.5
+    radius_deg = min(size_arcmin * DSS_PADDING / 60.0 / 2.0, max_radius)
+
+    for survey in ["DSS2 Blue", "DSS2 Red", "DSS"]:
+        try:
+            images = SkyView.get_images(position=pos_str,
+                                        survey=[survey],
+                                        radius=radius_deg * u.deg,
+                                        pixels=DSS_PIXELS)
+            if images:
+                return images[0][0].data, radius_deg
+        except Exception:
+            continue
+    return None, 0
+
+
 def make_eyepiece_view(target_num, out=None):
     """Génère la vue simulée dans l'oculaire centrée sur M<target_num>."""
     obj = next(o for o in MESSIER_OBJECTS if o[0] == target_num)
@@ -61,9 +107,20 @@ def make_eyepiece_view(target_num, out=None):
         out = os.path.join(os.path.dirname(__file__), "..", "result",
                            f"m{target_num}_eyepiece.png")
 
-    print(f"M{target_num} — récupération des étoiles…")
+    # Taille angulaire de l'objet
+    obj_size = fetch_object_size(target_num)
+    print(f"M{target_num} — taille : {obj_size:.1f}'")
+
+    print(f"  — récupération des étoiles…")
     stars = fetch_field_stars(center_ra, center_dec)
     print(f"  → {len(stars)} étoiles")
+
+    print(f"  — récupération image DSS2 ({obj_size * DSS_PADDING:.0f}')…")
+    dss_data, dss_radius_deg = fetch_dss_image(center_ra, center_dec, obj_size)
+    if dss_data is not None:
+        print(f"  → image {dss_data.shape[1]}x{dss_data.shape[0]} px")
+    else:
+        print("  → pas d'image DSS disponible")
 
     half_fov = FOV_DEG / 2.0
     cos_dec = np.cos(np.radians(center_dec))
@@ -98,7 +155,38 @@ def make_eyepiece_view(target_num, out=None):
                  zorder=0)
     ax.add_patch(sky)
 
-    # Masque blanc autour du cercle
+    # ── Étoiles ───────────────────────────────────────────────────────────────
+    if field_stars:
+        dra_arr = np.array([s[0] for s in field_stars])
+        ddec_arr = np.array([s[1] for s in field_stars])
+        mag_arr = np.array([s[2] for s in field_stars])
+
+        x, y = dra_arr, ddec_arr
+
+        sizes = np.clip(8 * np.power(10, (MAG_LIMIT - mag_arr) / 3.5),
+                        0.5, 120)
+        alphas = np.clip(0.25 + 0.75 * (MAG_LIMIT - mag_arr) / MAG_LIMIT,
+                         0.15, 1.0)
+
+        colors = np.zeros((len(x), 4))
+        colors[:, :3] = 0.0
+        colors[:, 3] = alphas
+
+        ax.scatter(x, y, s=sizes, c=colors, linewidths=0, zorder=2)
+
+    # ── Image DSS incrustée à la taille de l'objet (clip circulaire) ────────
+    if dss_data is not None:
+        interval = ZScaleInterval()
+        vmin, vmax = interval.get_limits(dss_data)
+        r = dss_radius_deg
+        img = ax.imshow(dss_data, cmap="gray_r", origin="lower",
+                        extent=[r, -r, -r, r],
+                        vmin=vmin, vmax=vmax, zorder=3,
+                        interpolation="bicubic")
+        clip_circle = Circle((0, 0), r, transform=ax.transData)
+        img.set_clip_path(clip_circle)
+
+    # ── Masque blanc autour du cercle ─────────────────────────────────────────
     outer = lim * 2
     theta = np.linspace(0, 2 * np.pi, 300)
     circle_x = half_fov * np.cos(theta)
@@ -120,44 +208,16 @@ def make_eyepiece_view(target_num, out=None):
                   linewidth=2, zorder=9)
     ax.add_patch(edge)
 
-    # ── Étoiles ───────────────────────────────────────────────────────────────
-    if field_stars:
-        dra_arr = np.array([s[0] for s in field_stars])
-        ddec_arr = np.array([s[1] for s in field_stars])
-        mag_arr = np.array([s[2] for s in field_stars])
-
-        x, y = dra_arr, ddec_arr
-
-        # Taille et luminosité proportionnelles à la magnitude
-        sizes = np.clip(8 * np.power(10, (MAG_LIMIT - mag_arr) / 3.5),
-                        0.5, 120)
-        alphas = np.clip(0.25 + 0.75 * (MAG_LIMIT - mag_arr) / MAG_LIMIT,
-                         0.15, 1.0)
-
-        # Couleurs RGBA individuelles pour alpha par étoile
-        colors = np.zeros((len(x), 4))
-        colors[:, :3] = 0.0       # noir
-        colors[:, 3] = alphas     # transparence individuelle
-
-        ax.scatter(x, y, s=sizes, c=colors, linewidths=0, zorder=5)
-
-    # ── Objets Messier dans le champ ──────────────────────────────────────────
+    # ── Labels Messier ────────────────────────────────────────────────────────
     for num, dra, ddec, ot, name in messier_in_fov:
         color = "#333333" if num == target_num else "#666666"
-        r = 0.08
-        obj_circle = Circle(
-            (dra, ddec), r,
-            facecolor="none", edgecolor=color,
-            linewidth=1.5, linestyle="--", alpha=0.7, zorder=6)
-        ax.add_patch(obj_circle)
-
         label = f"M{num}"
         if name:
             label += f" ({name})"
-        ax.text(dra, ddec + r + 0.04, label,
+        ax.text(dra, ddec + 0.12, label,
                 fontsize=11 if num == target_num else 9,
                 color=color, ha="center", va="bottom",
-                fontweight="bold", zorder=7)
+                fontweight="bold", zorder=10)
 
     # ── Type de l'objet (centré en haut à l'intérieur du cercle) ─────────────
     type_fr = TYPE_LABEL.get(otype, otype)
@@ -171,5 +231,5 @@ def make_eyepiece_view(target_num, out=None):
 
 
 if __name__ == "__main__":
-    for n in range(1, 11):
+    for n in range(40, 44):
         make_eyepiece_view(n)
