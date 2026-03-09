@@ -107,20 +107,9 @@ def make_eyepiece_view(target_num, out=None):
         out = os.path.join(os.path.dirname(__file__), "..", "result",
                            f"m{target_num}_eyepiece.png")
 
-    # Taille angulaire de l'objet
-    obj_size = fetch_object_size(target_num)
-    print(f"M{target_num} — taille : {obj_size:.1f}'")
-
     print(f"  — récupération des étoiles…")
     stars = fetch_field_stars(center_ra, center_dec)
     print(f"  → {len(stars)} étoiles")
-
-    print(f"  — récupération image DSS2 ({obj_size * DSS_PADDING:.0f}')…")
-    dss_data, dss_radius_deg = fetch_dss_image(center_ra, center_dec, obj_size)
-    if dss_data is not None:
-        print(f"  → image {dss_data.shape[1]}x{dss_data.shape[0]} px")
-    else:
-        print("  → pas d'image DSS disponible")
 
     half_fov = FOV_DEG / 2.0
     cos_dec = np.cos(np.radians(center_dec))
@@ -133,13 +122,23 @@ def make_eyepiece_view(target_num, out=None):
         if dra**2 + ddec**2 <= half_fov**2:
             field_stars.append((dra, ddec, mag))
 
-    # ── Objets Messier dans le champ ──────────────────────────────────────────
+    # ── Objets Messier dans le champ + leur image DSS ────────────────────────
     messier_in_fov = []
     for num, ra, dec, ot, name in MESSIER_OBJECTS:
         dra = (ra - center_ra) * cos_dec
         ddec = dec - center_dec
         if dra**2 + ddec**2 <= half_fov**2:
-            messier_in_fov.append((num, dra, ddec, ot, name))
+            obj_size = fetch_object_size(num)
+            print(f"  M{num} — taille : {obj_size:.1f}'")
+            print(
+                f"    — récupération image DSS2 ({obj_size * DSS_PADDING:.0f}')…")
+            dss_data, dss_r = fetch_dss_image(ra, dec, obj_size)
+            if dss_data is not None:
+                print(
+                    f"    → image {dss_data.shape[1]}x{dss_data.shape[0]} px")
+            else:
+                print("    → pas d'image DSS disponible")
+            messier_in_fov.append((num, dra, ddec, ot, name, dss_data, dss_r))
 
     # ── Figure ────────────────────────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(10, 10), facecolor="white",
@@ -174,17 +173,37 @@ def make_eyepiece_view(target_num, out=None):
 
         ax.scatter(x, y, s=sizes, c=colors, linewidths=0, zorder=2)
 
-    # ── Image DSS incrustée à la taille de l'objet (clip circulaire) ────────
-    if dss_data is not None:
+    # ── Images DSS incrustées pour chaque objet Messier du champ ────────────
+    for num, dra, ddec, ot, name, dss_data, dss_r in messier_in_fov:
+        if dss_data is None:
+            continue
         interval = ZScaleInterval()
         vmin, vmax = interval.get_limits(dss_data)
-        r = dss_radius_deg
+        r = dss_r
         img = ax.imshow(dss_data, cmap="gray_r", origin="lower",
-                        extent=[r, -r, -r, r],
+                        extent=[dra + r, dra - r, ddec - r, ddec + r],
                         vmin=vmin, vmax=vmax, zorder=3,
                         interpolation="bicubic")
-        clip_circle = Circle((0, 0), r, transform=ax.transData)
-        img.set_clip_path(clip_circle)
+        # Clip au cercle DSS
+        dss_clip = Circle((dra, ddec), r, transform=ax.transData)
+        img.set_clip_path(dss_clip)
+
+        # Étoiles dans le cercle DSS → rouge par-dessus l'image
+        if field_stars:
+            in_dss = [s for s in field_stars
+                      if (s[0] - dra)**2 + (s[1] - ddec)**2 <= r**2]
+            if in_dss:
+                dx = np.array([s[0] for s in in_dss])
+                dy = np.array([s[1] for s in in_dss])
+                dm = np.array([s[2] for s in in_dss])
+                sz = np.clip(8 * np.power(10, (MAG_LIMIT - dm) / 3.5),
+                             0.5, 120)
+                al = np.clip(0.25 + 0.75 * (MAG_LIMIT - dm) / MAG_LIMIT,
+                             0.15, 1.0)
+                rc = np.zeros((len(dx), 4))
+                rc[:, 0] = 1.0    # rouge
+                rc[:, 3] = al
+                ax.scatter(dx, dy, s=sz, c=rc, linewidths=0, zorder=4)
 
     # ── Masque blanc autour du cercle ─────────────────────────────────────────
     outer = lim * 2
@@ -209,7 +228,7 @@ def make_eyepiece_view(target_num, out=None):
     ax.add_patch(edge)
 
     # ── Labels Messier ────────────────────────────────────────────────────────
-    for num, dra, ddec, ot, name in messier_in_fov:
+    for num, dra, ddec, ot, name, _, _ in messier_in_fov:
         color = "#333333" if num == target_num else "#666666"
         label = f"M{num}"
         if name:
@@ -231,5 +250,6 @@ def make_eyepiece_view(target_num, out=None):
 
 
 if __name__ == "__main__":
-    for n in range(1, 111):
-        make_eyepiece_view(n)
+    # for n in range(1, 111):
+    #    make_eyepiece_view(n)
+    make_eyepiece_view(89)
