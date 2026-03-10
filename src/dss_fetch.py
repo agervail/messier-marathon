@@ -73,18 +73,18 @@ def fetch_dss_image(center_ra, center_dec, size_arcmin,
         L'image 2D et le rayon du cutout en degrés.
     """
     coord = SkyCoord(ra=center_ra, dec=center_dec, unit="deg", frame="icrs")
-    pos_str = coord.to_string("hmsdms")
 
     max_radius = 0.5
     radius_deg = min(size_arcmin * padding / 60.0 / 2.0, max_radius)
 
     surveys = [survey] if survey else ALL_SURVEYS
+    fallback = None  # meilleure mosaïque si aucun single-plate trouvé
     for s in surveys:
         # Certaines tailles exactes tombent sur un bug serveur SkyView
         # (limite de plaque) → on essaie avec un léger jitter du rayon.
         for r in [radius_deg, radius_deg * 1.03, radius_deg * 0.97]:
             try:
-                images = SkyView.get_images(position=pos_str,
+                images = SkyView.get_images(position=coord,
                                             survey=[s],
                                             radius=r * u.deg,
                                             pixels=pixels)
@@ -92,10 +92,15 @@ def fetch_dss_image(center_ra, center_dec, size_arcmin,
                     continue
                 hdu = images[0][0]
                 if _is_mosaic(hdu.header):
+                    if fallback is None:
+                        fallback = (hdu.data, r)
                     break  # multi-plaque → passer au survey suivant
                 return hdu.data, r
             except Exception:
                 continue
+    # Aucun single-plate → utiliser la mosaïque en dernier recours
+    if fallback is not None:
+        return fallback
     return None, 0
 
 

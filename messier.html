@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catalogue Messier</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a1a;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            padding: 2rem;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            color: #c0c8f0;
+            letter-spacing: 0.1em;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #12122a;
+            border: 1px solid #2a2a4a;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(100, 120, 255, 0.15);
+        }
+        .card img {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            display: block;
+            background: #000;
+        }
+        .card .label {
+            text-align: center;
+            padding: 0.6rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #a0b0e0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Catalogue Messier</h1>
+    <div class="grid">
+        <script>
+            for (let i = 1; i <= 110; i++) {
+                document.write(`
+                    <div class="card">
+                        <img src="img/m${i}_eyepiece.png" alt="M${i}" loading="lazy">
+                        <div class="label">M${i}</div>
+                    </div>
+                `);
+            }
+        </script>
+    </div>
+</body>
+</html>

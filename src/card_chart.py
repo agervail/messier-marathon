@@ -19,7 +19,7 @@ from messier_catalog import MESSIER_OBJECTS
 from dss_fetch import fetch_object_size, fetch_dss_image, DSS_PADDING
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-FOV_DEG = 1.8           # Champ de vue de l'oculaire (degrés)
+FOV_DEG = 2           # Champ de vue de l'oculaire (degrés)
 MAG_LIMIT = 11.5        # Magnitude limite des étoiles affichées
 
 TYPE_LABEL = {
@@ -55,13 +55,13 @@ def fetch_field_stars(center_ra, center_dec):
     return stars
 
 
-def make_eyepiece_view(target_num, out=None):
+def make_eyepiece_view(target_num, out=None, show_dss_stars=False):
     """Génère la vue simulée dans l'oculaire centrée sur M<target_num>."""
     obj = next(o for o in MESSIER_OBJECTS if o[0] == target_num)
     _, center_ra, center_dec, otype, obj_name = obj
 
     if out is None:
-        out = os.path.join(os.path.dirname(__file__), "..", "result",
+        out = os.path.join(os.path.dirname(__file__), "..", "img",
                            f"m{target_num}_eyepiece.png")
 
     print(f"  — récupération des étoiles…")
@@ -102,7 +102,7 @@ def make_eyepiece_view(target_num, out=None):
                            subplot_kw={"aspect": "equal"})
     ax.set_facecolor("white")
     lim = half_fov * 1.02
-    top_margin = lim * 0.06   # petite marge en haut pour le titre
+    top_margin = lim * 0.08   # petite marge en haut pour le titre
     ax.set_xlim(lim, -lim)    # RA croissant vers la gauche (Est)
     ax.set_ylim(-lim, lim + top_margin)
     ax.axis("off")
@@ -122,8 +122,8 @@ def make_eyepiece_view(target_num, out=None):
 
         sizes = np.clip(8 * np.power(10, (MAG_LIMIT - mag_arr) / 3.5),
                         0.5, 120)
-        alphas = np.clip(0.5 + 0.5 * (MAG_LIMIT - mag_arr) / MAG_LIMIT,
-                         0.4, 1.0)
+        alphas = np.clip(0.8 + 0.2 * (MAG_LIMIT - mag_arr) / MAG_LIMIT,
+                         0.8, 1.0)
 
         colors = np.zeros((len(x), 4))
         colors[:, :3] = 0.0
@@ -153,7 +153,7 @@ def make_eyepiece_view(target_num, out=None):
         ax.add_patch(dss_border)
 
         # Étoiles dans le cercle DSS → rouge par-dessus l'image
-        if field_stars:
+        if show_dss_stars and field_stars:
             in_dss = [s for s in field_stars
                       if (s[0] - dra)**2 + (s[1] - ddec)**2 <= r**2]
             if in_dss:
@@ -192,14 +192,18 @@ def make_eyepiece_view(target_num, out=None):
     ax.add_patch(edge)
 
     # ── Labels Messier ────────────────────────────────────────────────────────
-    for num, dra, ddec, ot, name, _, _ in messier_in_fov:
+    for num, dra, ddec, ot, name, _, dss_r_label in messier_in_fov:
         color = "#333333" if num == target_num else "#666666"
-        label = f"M{num}"
-        if name:
-            label += f" ({name})"
-        ax.text(dra, ddec + 0.12, label,
-                fontsize=11 if num == target_num else 9,
-                color=color, ha="center", va="bottom",
+        label_y = ddec + dss_r_label + 0.02
+        va = "bottom"
+        # Si le label sort du cercle de l'oculaire, on le colle au bord intérieur
+        dist = np.sqrt(dra**2 + label_y**2)
+        if dist > half_fov:
+            label_y = np.sqrt(max(half_fov**2 - dra**2, 0)) - 0.02
+            va = "top"
+        ax.text(dra, label_y, f"M{num}",
+                fontsize=13 if num == target_num else 11,
+                color="black", ha="center", va=va,
                 fontweight="bold", zorder=10)
 
     # ── Titre : nom en haut à gauche, type en haut à droite ─────────────────
@@ -221,7 +225,7 @@ def make_eyepiece_view(target_num, out=None):
 
 
 if __name__ == "__main__":
-    # for n in range(1, 111):
-    # make_eyepiece_view(n)
-    make_eyepiece_view(42)
+    for n in range(1, 111):
+        make_eyepiece_view(n)
+    # make_eyepiece_view(42)
     # make_eyepiece_view(106)
