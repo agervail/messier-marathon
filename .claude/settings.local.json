@@ -9,7 +9,11 @@
       "WebFetch(domain:learn.astropy.org)",
       "Bash(python -c \"from card_chart import make_eyepiece_view; make_eyepiece_view\\(1\\); make_eyepiece_view\\(42\\)\")",
       "Bash(python -c \":*)",
-      "Bash(python -c \"from card_chart import make_eyepiece_view; make_eyepiece_view\\(1\\); make_eyepiece_view\\(2\\); make_eyepiece_view\\(7\\)\")"
+      "Bash(python -c \"from card_chart import make_eyepiece_view; make_eyepiece_view\\(1\\); make_eyepiece_view\\(2\\); make_eyepiece_view\\(7\\)\")",
+      "Bash(python3 -c \":*)",
+      "Bash(python3 -c \"from card_chart import make_eyepiece_view; make_eyepiece_view\\(1\\)\")",
+      "Bash(python -c \"from dss_fetch import fetch_object_size, fetch_dss_image, fetch_messier_dss; print\\(''import OK''\\)\")",
+      "Bash(python dss_fetch.py --compare 21)"
     ]
   }
 }

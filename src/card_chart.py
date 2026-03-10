@@ -13,40 +13,20 @@ from matplotlib.patches import PathPatch
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astroquery.vizier import Vizier
-from astroquery.skyview import SkyView
-from astroquery.simbad import Simbad
 from astropy.visualization import ZScaleInterval
 
 from messier_catalog import MESSIER_OBJECTS
+from dss_fetch import fetch_object_size, fetch_dss_image, DSS_PADDING
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 FOV_DEG = 1.8           # Champ de vue de l'oculaire (degrés)
 MAG_LIMIT = 11.5        # Magnitude limite des étoiles affichées
-DSS_PIXELS = 500        # Résolution de l'image DSS
-DSS_PADDING = 1.3       # Facteur de marge autour de l'objet pour le DSS
-DEFAULT_SIZE_ARCMIN = 10  # Taille par défaut si SIMBAD ne donne rien
 
 TYPE_LABEL = {
     "GC": "Globular Cluster", "OC": "Open Cluster", "Gx": "Galaxy",
     "EN": "Diffuse Nebula", "PN": "Planetary Nebula",
     "SNR": "Supernova Remnant", "SC": "Star Cloud", "DS": "Double Star",
 }
-
-
-def fetch_object_size(target_num):
-    """Récupère la taille angulaire (arcmin) de l'objet via SIMBAD."""
-    s = Simbad()
-    s.add_votable_fields("dim")
-    result = s.query_object(f"M {target_num}")
-    if result is None:
-        return DEFAULT_SIZE_ARCMIN
-    try:
-        maj = float(result["galdim_majaxis"][0])
-        if np.isnan(maj) or maj <= 0:
-            return DEFAULT_SIZE_ARCMIN
-        return maj
-    except (KeyError, TypeError, ValueError, IndexError):
-        return DEFAULT_SIZE_ARCMIN
 
 
 def fetch_field_stars(center_ra, center_dec):
@@ -73,39 +53,6 @@ def fetch_field_stars(center_ra, center_dec):
         except (ValueError, KeyError, TypeError):
             continue
     return stars
-
-
-def fetch_dss_image(center_ra, center_dec, size_arcmin):
-    """Télécharge une image DSS2 Blue à la taille de l'objet."""
-    coord = SkyCoord(ra=center_ra, dec=center_dec, unit="deg", frame="icrs")
-    pos_str = coord.to_string("hmsdms")
-
-    # Taille avec marge, plafonnée à 0.5° (les très grands objets n'ont pas
-    # besoin d'un cutout DSS — les étoiles suffisent)
-    max_radius = 0.5
-    radius_deg = min(size_arcmin * DSS_PADDING / 60.0 / 2.0, max_radius)
-
-    for survey in ["DSS2 Blue", "DSS2 Red", "DSS"]:
-        try:
-            images = SkyView.get_images(position=pos_str,
-                                        survey=[survey],
-                                        radius=radius_deg * u.deg,
-                                        pixels=DSS_PIXELS)
-            if not images:
-                continue
-            data = images[0][0].data
-            # Rejeter si trop de pixels proviennent d'une plaque adjacente
-            hist, edges = np.histogram(data.ravel(), bins=100)
-            mode_idx = np.argmax(hist)
-            mode_val = (edges[mode_idx] + edges[mode_idx + 1]) / 2.0
-            plate_thresh = mode_val + 3 * abs(mode_val)
-            bad_frac = np.sum(data >= plate_thresh) / data.size
-            if bad_frac > 0.05:
-                continue  # >5% de bord de plaque → essayer un autre survey
-            return data, radius_deg
-        except Exception:
-            continue
-    return None, 0
 
 
 def make_eyepiece_view(target_num, out=None):
@@ -138,7 +85,7 @@ def make_eyepiece_view(target_num, out=None):
         dra = (ra - center_ra) * cos_dec
         ddec = dec - center_dec
         if dra**2 + ddec**2 <= half_fov**2:
-            obj_size = fetch_object_size(num)
+            obj_size = max(fetch_object_size(num), 5.0)
             print(f"  M{num} — taille : {obj_size:.1f}'")
             print(
                 f"    — récupération image DSS2 ({obj_size * DSS_PADDING:.0f}')…")
@@ -198,6 +145,12 @@ def make_eyepiece_view(target_num, out=None):
         # Clip au cercle DSS
         dss_clip = Circle((dra, ddec), r, transform=ax.transData)
         img.set_clip_path(dss_clip)
+
+        # Contour pointillé autour de l'objet
+        dss_border = Circle((dra, ddec), r, fill=False,
+                            edgecolor="black", linewidth=2,
+                            linestyle="--", zorder=5)
+        ax.add_patch(dss_border)
 
         # Étoiles dans le cercle DSS → rouge par-dessus l'image
         if field_stars:
@@ -269,6 +222,6 @@ def make_eyepiece_view(target_num, out=None):
 
 if __name__ == "__main__":
     # for n in range(1, 111):
-    #    make_eyepiece_view(n)
-    make_eyepiece_view(105)
-    make_eyepiece_view(106)
+    # make_eyepiece_view(n)
+    make_eyepiece_view(42)
+    # make_eyepiece_view(106)
