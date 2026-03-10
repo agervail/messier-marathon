@@ -91,8 +91,18 @@ def fetch_dss_image(center_ra, center_dec, size_arcmin):
                                         survey=[survey],
                                         radius=radius_deg * u.deg,
                                         pixels=DSS_PIXELS)
-            if images:
-                return images[0][0].data, radius_deg
+            if not images:
+                continue
+            data = images[0][0].data
+            # Rejeter si trop de pixels proviennent d'une plaque adjacente
+            hist, edges = np.histogram(data.ravel(), bins=100)
+            mode_idx = np.argmax(hist)
+            mode_val = (edges[mode_idx] + edges[mode_idx + 1]) / 2.0
+            plate_thresh = mode_val + 3 * abs(mode_val)
+            bad_frac = np.sum(data >= plate_thresh) / data.size
+            if bad_frac > 0.05:
+                continue  # >5% de bord de plaque → essayer un autre survey
+            return data, radius_deg
         except Exception:
             continue
     return None, 0
@@ -145,8 +155,9 @@ def make_eyepiece_view(target_num, out=None):
                            subplot_kw={"aspect": "equal"})
     ax.set_facecolor("white")
     lim = half_fov * 1.02
+    top_margin = lim * 0.06   # petite marge en haut pour le titre
     ax.set_xlim(lim, -lim)    # RA croissant vers la gauche (Est)
-    ax.set_ylim(-lim, lim)
+    ax.set_ylim(-lim, lim + top_margin)
     ax.axis("off")
 
     # Fond blanc du champ circulaire
@@ -164,8 +175,8 @@ def make_eyepiece_view(target_num, out=None):
 
         sizes = np.clip(8 * np.power(10, (MAG_LIMIT - mag_arr) / 3.5),
                         0.5, 120)
-        alphas = np.clip(0.25 + 0.75 * (MAG_LIMIT - mag_arr) / MAG_LIMIT,
-                         0.15, 1.0)
+        alphas = np.clip(0.5 + 0.5 * (MAG_LIMIT - mag_arr) / MAG_LIMIT,
+                         0.4, 1.0)
 
         colors = np.zeros((len(x), 4))
         colors[:, :3] = 0.0
@@ -238,10 +249,17 @@ def make_eyepiece_view(target_num, out=None):
                 color=color, ha="center", va="bottom",
                 fontweight="bold", zorder=10)
 
-    # ── Type de l'objet (centré en haut à l'intérieur du cercle) ─────────────
-    type_fr = TYPE_LABEL.get(otype, otype)
-    ax.text(0, half_fov * 0.88, type_fr,
-            ha="center", va="top", fontsize=11, color="#555555", zorder=10)
+    # ── Titre : nom en haut à gauche, type en haut à droite ─────────────────
+    title = f"M{target_num}"
+    if obj_name:
+        title += f"  ({obj_name})"
+    type_en = TYPE_LABEL.get(otype, otype)
+    ax.text(0.02, 0.99, title, fontsize=20, fontweight="bold",
+            color="#333333", ha="left", va="top", transform=ax.transAxes,
+            zorder=10)
+    ax.text(0.98, 0.99, type_en, fontsize=16,
+            color="#555555", ha="right", va="top", transform=ax.transAxes,
+            zorder=10)
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
     plt.savefig(out, dpi=200, facecolor="white", bbox_inches="tight")
@@ -252,4 +270,5 @@ def make_eyepiece_view(target_num, out=None):
 if __name__ == "__main__":
     # for n in range(1, 111):
     #    make_eyepiece_view(n)
-    make_eyepiece_view(89)
+    make_eyepiece_view(105)
+    make_eyepiece_view(106)
