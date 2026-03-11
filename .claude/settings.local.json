@@ -13,7 +13,8 @@
       "Bash(python3 -c \":*)",
       "Bash(python3 -c \"from card_chart import make_eyepiece_view; make_eyepiece_view\\(1\\)\")",
       "Bash(python -c \"from dss_fetch import fetch_object_size, fetch_dss_image, fetch_messier_dss; print\\(''import OK''\\)\")",
-      "Bash(python dss_fetch.py --compare 21)"
+      "Bash(python dss_fetch.py --compare 21)",
+      "Bash(python3 -c \"from PIL import Image; img = Image.open\\(''/workspaces/messier/img/m1_eyepiece.png''\\); print\\(img.size, img.mode\\)\")"
     ]
   }
 }
